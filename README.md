@@ -1,0 +1,74 @@
+# YOLO Hyperparameter Studio
+
+A local web UI that runs randomized hyperparameter searches for Ultralytics YOLO detection, segmentation, and classification models. The GUI supports YOLO26, YOLO11, and YOLOv8 with Nano through Extra Large model sizes. It discovers dataset layouts, creates a YAML hyperparameter record for every trial, tracks metrics, and identifies the strongest trial using the metrics you select.
+
+## Viability and scope
+
+The project is a practical MVP for single-machine experiments. Trials run sequentially by default, which avoids multiple jobs fighting for the same GPU. Search state and results survive a server restart in `data/experiments.json`; Ultralytics artifacts and each generated `hyperparameters.yaml` are saved under `data/runs/`.
+
+Random search is a sound baseline and parallelizes naturally, but it does not learn from prior trials. For large training budgets, Optuna/Bayesian sampling, pruning, GPU scheduling, and a database-backed job queue would be valuable later additions. This app reports validation metrics emitted by Ultralytics. A truly untouched test set should be evaluated once after choosing a configuration, rather than used to tune the model.
+
+The **Randomization ranges** section controls random search. Each trial samples a new value between the minimum and maximum for every numeric hyperparameter, and randomly selects one batch size and optimizer from their lists. A fixed random seed makes the sequence repeatable; it does not stop the values from being randomized. For example, rerunning seed `42` reproduces the same sequence of Trial 1, Trial 2, and Trial 3 samples, while those three trials still differ from one another. Use the **Parameter help** card in that section to replace the controls with plain-language explanations and the currently configured sampling range of every setting; switching back preserves the values you entered.
+
+## Run
+
+Python 3.10+ is required.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Open <http://127.0.0.1:8000>. No command-line argument parser is used; optional settings come from environment variables:
+
+For a beginner-friendly explanation of how to change the logo, title, wording, colors, fonts, and layout, see [`custom_gui.md`](custom_gui.md).
+
+- `HYPER_GUI_DATA`: result directory (default: `./data`)
+- `HYPER_GUI_WORKERS`: simultaneous experiments (default: `1`)
+
+The first use of a stock model such as `yolo11n.pt` may download its weights. Enter a local weights path to remain fully offline.
+
+## Dataset layouts
+
+Detection and segmentation accept either a dataset YAML path or a folder containing `data.yaml`, `dataset.yaml`, or another top-level `.yaml` file.
+
+```text
+vehicles/
+├── data.yaml
+├── images/{train,val,test}/
+└── labels/{train,val,test}/
+```
+
+Classification accepts a directory containing `train` and either `val` or `test`, with one subdirectory per class.
+
+```text
+animals/
+├── train/{cats,dogs}/
+├── val/{cats,dogs}/
+└── test/{cats,dogs}/
+```
+
+## Architecture
+
+```text
+domain/          entities and validation; no framework dependencies
+application/     optimizer use case and trainer/repository ports
+infrastructure/  Ultralytics, filesystem dataset, and JSON adapters
+interfaces/      FastAPI routes and dependency composition
+frontend/        plain HTML, CSS, and JavaScript UI
+tests/           fast unit tests with a fake trainer
+```
+
+The objective is the arithmetic mean of selected metrics. F1 is calculated from precision and recall if the trainer does not emit it directly. A failed trial is recorded without discarding successful trials. Cancellation takes effect before the next trial because Ultralytics training itself is not safely interruptible mid-epoch from this adapter.
+
+### Interrupted-training recovery
+
+Queued and running experiments are automatically re-enqueued when the application starts. Already completed trials are skipped. An interrupted trial keeps its original sampled hyperparameters and resumes from `data/runs/<experiment-id>-trial-<number>/weights/last.pt`, restoring its epoch, model weights, optimizer, and scheduler through Ultralytics. If interruption happened before the first checkpoint was written, that trial starts again from its original base model with the same hyperparameters. A user-cancelled or failed experiment is not automatically restarted.
+
+## Test
+
+```bash
+pytest -q
+```

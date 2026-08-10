@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Tune Ultralytics YOLO models from a focused local interface." />
+    <title>YOLO Hyperparameter Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="glow glow-a"></div><div class="glow glow-b"></div>
+    <header class="topbar">
+      <a class="brand" href="/"><span class="mark">N</span><span>Nicholas <b>Ganteng</b></span></a>
+      <div class="system-state"><span class="pulse"></span> Local training engine</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">HYPERPARAMETER SEARCH / 01</p>
+          <h1>Build a better model,<br /><em>one trial at a time.</em></h1>
+        </div>
+        <p class="hero-copy">Configure a search across detection, segmentation, or classification. Every run is tracked, scored, and easy to compare.</p>
+      </section>
+
+      <section class="workspace">
+        <form id="experiment-form" class="panel config-panel">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>New experiment</h2></div>
+            <span class="muted">Configure training</span>
+          </div>
+
+          <label class="field wide"><span>Experiment name</span><input name="name" value="My YOLO search" required maxlength="100" /></label>
+
+          <fieldset>
+            <legend>Model task</legend>
+            <div class="task-picker">
+              <label><input type="radio" name="task" value="detect" checked /><span><b>Detect</b><small>Boxes & objects</small></span></label>
+              <label><input type="radio" name="task" value="segment" /><span><b>Segment</b><small>Pixel masks</small></span></label>
+              <label><input type="radio" name="task" value="classify" /><span><b>Classify</b><small>Image labels</small></span></label>
+            </div>
+          </fieldset>
+
+          <div class="grid-3">
+            <label class="field"><span>YOLO version</span><select id="yolo-version"></select></label>
+            <label class="field"><span>Model size</span><select id="model-size"></select></label>
+            <label class="field"><span>Compute device</span><input name="device" placeholder="auto, cpu, 0" /></label>
+          </div>
+          
+          <div class="model-resolution">Weights: <code id="resolved-model">—</code> <span id="version-note"></span></div>
+
+          <div class="dataset-block">
+            <label class="field wide"><span>Dataset path</span><div class="input-action"><input name="dataset" id="dataset" placeholder="/datasets/vehicles/data.yaml" required /><button type="button" id="inspect-dataset">Inspect</button></div></label>
+            <div id="dataset-status" class="dataset-status">Enter a local path. Detection and segmentation use a dataset YAML; classification uses a folder.</div>
+          </div>
+
+          <div class="grid-3">
+            <label class="field"><span>Trials</span><input name="trials" type="number" value="10" min="1" max="1000" required /></label>
+            <label class="field"><span>Epochs</span><input name="epochs" type="number" value="30" min="1" required /></label>
+            <label class="field"><span>Image size</span><input name="image_size" type="number" value="640" min="32" step="32" required /></label>
+          </div>
+
+          <fieldset>
+            <legend>Optimize metrics</legend>
+            <div id="metrics" class="metric-picker"></div>
+            <p class="hint">Multiple metrics are combined using their arithmetic mean.</p>
+          </fieldset>
+
+          <details class="advanced">
+            <summary>Randomization ranges <span>ADVANCED · 22 PARAMETERS</span></summary>
+            <div class="random-explainer">
+              <b>These values are randomized.</b>
+              <span>For every trial, the optimizer randomly picks one value between each minimum and maximum. Batch size and optimizer are randomly picked from their lists. The seed makes that random sequence reproducible.</span>
+            </div>
+            <div class="range-mode-switch" role="group" aria-label="Randomization range view">
+              <button type="button" class="range-mode active" data-range-view="configure"><span>⚙</span><b>Configure values</b><small>Edit random minimums and maximums</small></button>
+              <button type="button" class="range-mode help-mode" data-range-view="help"><span>?</span><b>Parameter help</b><small>Learn what every setting affects</small></button>
+            </div>
+            <div id="range-config-view">
+              <div class="range-head"><span>Parameter</span><span>Minimum</span><span>Maximum</span></div>
+              <div id="search-space" class="range-grid"></div>
+              <div class="grid-3 advanced-footer">
+                <label class="field"><span>Batch choices</span><input id="batch-choices" value="4, 8, 16, 32" /></label>
+                <label class="field"><span>Optimizer choices</span><input id="optimizer-choices" value="SGD, Adam, AdamW" /></label>
+                <label class="field"><span>Random seed</span><input id="random-seed" type="number" value="42" title="Trials are still randomized; the same seed reproduces the same sequence." /><small class="field-note">Still random—same seed repeats the sequence.</small></label>
+              </div>
+            </div>
+            <div id="range-help-view" hidden>
+              <div class="help-intro"><b>How to read this guide</b><span>Each card shows the range currently configured for random sampling. “Higher” and “lower” describe the effect of changing a value—not a guarantee of better accuracy. Good values depend on your model, dataset, task, and training length.</span></div>
+              <div id="parameter-help" class="parameter-help"></div>
+            </div>
+          </details>
+
+          <div id="form-message" class="message" hidden></div>
+          <button class="primary" type="submit"><span>Start optimization</span><span aria-hidden="true">↗</span></button>
+        </form>
+
+        <aside class="panel results-panel">
+          <div class="panel-heading">
+            <div><span class="step">02</span><h2>Experiments</h2></div>
+            <button id="refresh" class="icon-button" title="Refresh">↻</button>
+          </div>
+          <div id="experiments" class="experiments"><div class="empty"><span>◇</span><p>No experiments yet</p><small>Your training runs will appear here.</small></div></div>
+        </aside>
+      </section>
+    </main>
+
+    <div id="detail-modal" class="modal" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <section class="modal-card">
+        <button class="modal-close" data-close>×</button>
+        <div id="experiment-detail"></div>
+      </section>
+    </div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+[project]
+name = "yolo-hyperparameter-studio"
+version = "1.0.0"
+description = "Local GUI for Ultralytics YOLO hyperparameter experiments"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "ultralytics>=8.3,<9",
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "httpx>=0.27,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
