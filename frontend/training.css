@@ -1,0 +1,49 @@
+.training-hero { margin-bottom: 35px; }
+.training-layout { display: grid; grid-template-columns: minmax(620px, 1.45fr) minmax(340px, .7fr); gap: 18px; align-items: start; }
+.training-main { display: grid; gap: 18px; }
+.training-section { padding: 29px; }
+.jobs-panel { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; }
+.select-gap, .form-gap { margin-top: 18px; }
+.winner-header { display: flex; justify-content: space-between; gap: 15px; align-items: end; margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--line); }
+.winner-header h3 { margin: 0; font-size: 18px; }
+.winner-header p { color: var(--muted); font: 10px DM Mono; margin: 4px 0 0; }
+.winner-score { text-align: right; }
+.winner-score span { display: block; color: var(--muted); font-size: 9px; }
+.winner-score b { font: 22px DM Mono; color: var(--purple); }
+.metric-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 14px; }
+.metric-card { padding: 10px; background: rgba(255,255,255,.65); border: 1px solid var(--line); border-radius: 8px; }
+.metric-card span { display: block; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+.metric-card b { display: block; font: 13px DM Mono; margin-top: 4px; }
+.hyper-details { margin-top: 13px; border: 1px solid var(--line); border-radius: 9px; }
+.hyper-details summary { cursor: pointer; padding: 11px; font-size: 10px; font-weight: 700; }
+.hyper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+.hyper-grid div { background: #faf9f4; padding: 8px; min-width: 0; }
+.hyper-grid span { display: block; color: var(--muted); font: 8px DM Mono; }
+.hyper-grid b { display: block; overflow: hidden; text-overflow: ellipsis; font: 10px DM Mono; margin-top: 3px; }
+.mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.mode-picker input { position: absolute; opacity: 0; }
+.mode-picker label > span { display: block; height: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.mode-picker b, .mode-picker small { display: block; }
+.mode-picker b { font-size: 12px; }
+.mode-picker small { color: var(--muted); line-height: 1.5; margin-top: 4px; }
+.mode-picker input:checked + span { border-color: var(--purple); background: rgba(121,92,255,.07); box-shadow: 0 0 0 2px rgba(121,92,255,.07); }
+.mode-picker label.disabled { opacity: .45; pointer-events: none; }
+.split-warning { margin-top: 10px; border-radius: 8px; background: #fff0c2; color: #705611; font-size: 10px; padding: 9px 11px; }
+.continue-epochs { margin-top: 20px; max-width: 350px; }
+.split-contract { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 21px; padding-top: 18px; border-top: 1px solid var(--line); }
+.split-contract div { border-radius: 8px; padding: 10px; background: rgba(217,255,67,.13); }
+.split-contract .reserved { background: #eeece6; }
+.split-contract b { display: block; font-size: 9px; margin-bottom: 4px; }
+.split-contract code { display: block; color: var(--muted); font: 9px DM Mono; overflow-wrap: anywhere; }
+#training-jobs { display: grid; gap: 9px; }
+.job-card { border: 1px solid var(--line); border-radius: 10px; padding: 13px; }
+.job-head { display: flex; justify-content: space-between; gap: 7px; }
+.job-head b { font-size: 12px; }
+.job-meta { margin-top: 7px; color: var(--muted); font: 9px DM Mono; line-height: 1.5; }
+.job-metrics { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.job-metrics span { background: #efede6; border-radius: 5px; padding: 4px 6px; font: 8px DM Mono; }
+.job-error { color: #a53219; font-size: 9px; margin-top: 8px; overflow-wrap: anywhere; }
+.resume-job { margin-top: 9px; border: 1px solid var(--purple); background: white; color: var(--purple); border-radius: 7px; padding: 6px 9px; font-size: 9px; font-weight: 700; cursor: pointer; }
+.job-path { margin-top: 8px; color: var(--muted); font: 8px DM Mono; overflow-wrap: anywhere; }
+@media (max-width: 980px) { .training-layout { grid-template-columns: 1fr; }.jobs-panel { position: static; max-height: none; } }
+@media (max-width: 600px) { .training-section { padding: 19px; }.mode-picker, .metric-cards, .hyper-grid, .split-contract { grid-template-columns: 1fr; } }

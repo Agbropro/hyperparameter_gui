@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Train Best Model · Nicholas Ganteng</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/training.css" />
+  </head>
+  <body>
+    <div class="glow glow-a"></div><div class="glow glow-b"></div>
+    <header class="topbar">
+      <a class="brand" href="/"><span class="mark">N</span><span>Nicholas <b>Ganteng</b></span></a>
+      <nav class="topnav"><a href="/">Optimize</a><a class="active" href="/training">Train best</a></nav>
+      <div class="system-state"><span class="pulse"></span> Final training</div>
+    </header>
+    <main>
+      <section class="hero training-hero">
+        <div><p class="eyebrow">FINAL MODEL TRAINING / 02</p><h1>Turn a winning trial<br />into your <em>final model.</em></h1></div>
+        <p class="hero-copy">Load optimizer results, inspect the winner, then start a full run or continue its latest weights. Only the train and val splits are used here.</p>
+      </section>
+      <section class="training-layout">
+        <div class="training-main">
+          <section class="panel training-section">
+            <div class="panel-heading"><div><span class="step">01</span><h2>Load optimizer results</h2></div><span class="muted">experiments.json</span></div>
+            <label class="field"><span>Experiments JSON path</span><div class="input-action"><input id="experiments-path" placeholder="/path/to/data/experiments.json" /><button id="load-experiments" type="button">Load</button></div></label>
+            <div id="source-message" class="message" hidden></div>
+            <label id="experiment-select-wrap" class="field select-gap" hidden><span>Experiment</span><select id="experiment-select"></select></label>
+            <div id="winner-preview" hidden></div>
+          </section>
+          <form id="training-form" class="panel training-section" hidden>
+            <div class="panel-heading"><div><span class="step">02</span><h2>Training method</h2></div><span class="muted">Choose initialization</span></div>
+            <div class="mode-picker">
+              <label><input type="radio" name="mode" value="new" checked /><span><b>New final run</b><small>Start from selected pretrained YOLO weights and apply the winner's hyperparameters.</small></span></label>
+              <label id="continue-option"><input type="radio" name="mode" value="continue" /><span><b>Continue latest weights</b><small>Start an additional phase from the winning trial's last.pt.</small></span></label>
+            </div>
+            <div id="weight-warning" class="split-warning" hidden></div>
+            <label class="field wide form-gap"><span>Final run name</span><input name="name" value="Final production model" required /></label>
+            <div id="new-training-fields">
+              <div class="grid-3">
+                <label class="field"><span>YOLO type</span><select name="task" id="final-task"><option value="detect">Detection</option><option value="segment">Segmentation</option><option value="classify">Classification</option></select></label>
+                <label class="field"><span>YOLO version</span><select name="version"><option value="yolo26">YOLO26</option><option value="yolo11">YOLO11</option><option value="yolov8">YOLOv8</option></select></label>
+                <label class="field"><span>Model size</span><select name="size"><option value="n">Nano</option><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option><option value="x">Extra large</option></select></label>
+              </div>
+              <div class="grid-3">
+                <label class="field"><span>Epochs</span><input name="epochs" type="number" value="100" min="1" required /></label>
+                <label class="field"><span>Batch size</span><input name="batch" type="number" value="16" min="1" required /></label>
+                <label class="field"><span>Image size</span><input name="image_size" type="number" value="640" min="32" step="32" required /></label>
+              </div>
+              <div class="grid-2">
+                <label class="field"><span>Dataset</span><input name="dataset" id="final-dataset" required /></label>
+                <label class="field"><span>Device</span><input name="device" placeholder="auto, cpu, 0" /></label>
+              </div>
+            </div>
+            <div id="continue-training-fields" hidden>
+              <label class="field continue-epochs"><span>Additional training epochs</span><input id="continue-epochs" type="number" value="50" min="1" /><small class="field-note">Starts a new phase from the completed trial's last.pt. If this final job is interrupted, it resumes its own checkpoint automatically.</small></label>
+            </div>
+            <div class="split-contract"><div><b>Training data</b><code id="train-split">—</code></div><div><b>Validation during training</b><code id="val-split">—</code></div><div class="reserved"><b>Reserved—not used here</b><code id="test-split">—</code></div></div>
+            <div id="training-message" class="message" hidden></div>
+            <button class="primary" type="submit"><span>Start final training</span><span>↗</span></button>
+          </form>
+        </div>
+        <aside class="panel training-section jobs-panel">
+          <div class="panel-heading"><div><span class="step">03</span><h2>Final training jobs</h2></div><button id="refresh-jobs" class="icon-button">↻</button></div>
+          <div id="training-jobs"><div class="empty"><span>◇</span><p>No final runs yet</p><small>Created jobs will appear here.</small></div></div>
+        </aside>
+      </section>
+    </main>
+    <script src="/assets/training.js" defer></script>
+  </body>
+</html>

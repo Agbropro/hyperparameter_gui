@@ -48,6 +48,25 @@ The configuration file is used by `python main.py`. Starting the server with the
 
 The first use of a stock model such as `yolo11n.pt` may download its weights. Enter a local weights path to remain fully offline.
 
+## Train a final model from optimizer results
+
+Open <http://127.0.0.1:8000/training> or select **Train best** in the header.
+
+1. Paste the absolute path to an `experiments.json` created by this application.
+2. Select a completed experiment. The page displays its winning trial, metrics, hyperparameters, dataset splits, and checkpoint availability.
+3. Choose one of two methods:
+   - **New final run** starts from a selected pretrained YOLO version/task/size and applies the winning hyperparameters. Epochs and batch size are explicit final-run controls.
+   - **Continue latest weights** loads the winning trial's `weights/last.pt` and starts an additional training phase. Because the tuning run has already completed, this is intentionally a new phase from those weights rather than `resume=True` on the finished trial.
+4. Final jobs and results appear on the right. Output is stored in `data/final_runs/<job-id>-<name>/`, with final weights under `weights/best.pt`.
+
+The final-training adapter passes the dataset to `model.train(..., val=True)` and never selects the YAML `test` split. Therefore:
+
+- the YAML `train:` entry updates model weights;
+- the YAML `val:` entry validates during training;
+- the YAML `test:` entry remains untouched for a separate final `model.val(split="test")` evaluation.
+
+If final training is interrupted after at least one epoch, its own `weights/last.pt` is used with `resume=True`, restoring the optimizer, scheduler, and epoch. Queued/running final jobs recover automatically after an application restart. Failed jobs also have a manual **Resume from last checkpoint** action; if no checkpoint was written, the same job starts again from its original source and configuration.
+
 ## Dataset layouts
 
 Detection and segmentation accept either a dataset YAML path or a folder containing `data.yaml`, `dataset.yaml`, or another top-level `.yaml` file.
