@@ -18,7 +18,7 @@ Python 3.10+ is required.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+python main.py
 ```
 
 Open <http://127.0.0.1:8000>. No command-line argument parser is used; optional settings come from environment variables:
@@ -27,6 +27,24 @@ For a beginner-friendly explanation of how to change the logo, title, wording, c
 
 - `HYPER_GUI_DATA`: result directory (default: `./data`)
 - `HYPER_GUI_WORKERS`: simultaneous experiments (default: `1`)
+
+### Server host and port
+
+Edit the root `config.yaml` file to change the address used by `python main.py`:
+
+```yaml
+server:
+  host: 127.0.0.1
+  port: 8000
+  reload: true
+```
+
+- `127.0.0.1` makes the GUI available only on the current computer.
+- `0.0.0.0` listens on all network interfaces so another device can connect using this computer's LAN address. Only use it on a trusted network and configure firewall access deliberately.
+- `port` must be between `1` and `65535` and must not already be occupied.
+- `reload` should normally be `true` during development and `false` for deployment.
+
+The configuration file is used by `python main.py`. Starting the server with the external `uvicorn main:app` command uses Uvicorn's CLI host and port instead.
 
 The first use of a stock model such as `yolo11n.pt` may download its weights. Enter a local weights path to remain fully offline.
 
