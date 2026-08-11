@@ -18,6 +18,7 @@ from application.services import HyperparameterOptimizer
 from application.final_training import FinalTrainingService
 from domain.entities import Experiment, ExperimentConfig, Range, SearchSpace, SUPPORTED_METRICS, TaskType
 from domain.training import TrainingJob, TrainingMode
+from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
 from infrastructure.experiment_importer import get_imported_experiment, read_experiment_file
 from infrastructure.final_trainer import UltralyticsFinalTrainer
@@ -287,6 +288,7 @@ def create_training_job(request: TrainingJobRequest) -> dict[str, Any]:
             hyperparameters=hyperparameters,
             source_weights=source_weights,
         )
+        job.run_name = final_run_name(job.name, job.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

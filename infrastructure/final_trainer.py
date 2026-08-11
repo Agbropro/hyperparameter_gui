@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from domain.training import TrainingJob
+from domain.naming import final_run_name
 from infrastructure.yolo_trainer import UltralyticsTrainer
 
 
@@ -20,7 +21,8 @@ class UltralyticsFinalTrainer:
         except ImportError as exc:
             raise RuntimeError("Ultralytics is not installed. Run: pip install -r requirements.txt") from exc
 
-        run_name = f"{job.id}-{safe_name(job.name)}"
+        run_name = job.run_name or final_run_name(job.name, job.id)
+        job.run_name = run_name
         run_dir = self.output_dir / run_name
         recovery_checkpoint = run_dir / "weights" / "last.pt"
         if recovery_checkpoint.is_file():
@@ -57,8 +59,3 @@ class UltralyticsFinalTrainer:
         metrics = UltralyticsTrainer._normalize_metrics(raw)
         save_dir = str(getattr(result, "save_dir", run_dir))
         return metrics, save_dir, resumed
-
-
-def safe_name(value: str) -> str:
-    cleaned = "".join(character if character.isalnum() or character in "-_" else "-" for character in value)
-    return cleaned.strip("-")[:60] or "final-model"

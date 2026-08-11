@@ -9,6 +9,7 @@ from typing import Any
 
 from domain.entities import ExperimentStatus
 from domain.training import TrainingJob, TrainingMode
+from domain.naming import safe_name
 
 
 class JsonTrainingJobRepository:
@@ -47,6 +48,9 @@ class JsonTrainingJobRepository:
     @staticmethod
     def _hydrate(raw: dict[str, Any]) -> TrainingJob:
         values = dict(raw)
+        if "run_name" not in values:
+            # Compatibility with jobs created under the original ID-first rule.
+            values["run_name"] = f"{values['id']}-{safe_name(values['name'], 'final-model')}"
         values["mode"] = TrainingMode(values["mode"])
         values["status"] = ExperimentStatus(values["status"])
         return TrainingJob(**values)

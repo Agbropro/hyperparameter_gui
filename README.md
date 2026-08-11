@@ -57,7 +57,7 @@ Open <http://127.0.0.1:8000/training> or select **Train best** in the header.
 3. Choose one of two methods:
    - **New final run** starts from a selected pretrained YOLO version/task/size and applies the winning hyperparameters. Epochs and batch size are explicit final-run controls.
    - **Continue latest weights** loads the winning trial's `weights/last.pt` and starts an additional training phase. Because the tuning run has already completed, this is intentionally a new phase from those weights rather than `resume=True` on the finished trial.
-4. Final jobs and results appear on the right. Output is stored in `data/final_runs/<job-id>-<name>/`, with final weights under `weights/best.pt`.
+4. Final jobs and results appear on the right. Output is stored in `data/final_runs/<name>-<short-job-id>/`, with final weights under `weights/best.pt`.
 
 The final-training adapter passes the dataset to `model.train(..., val=True)` and never selects the YAML `test` split. Therefore:
 
@@ -102,7 +102,7 @@ The objective is the arithmetic mean of selected metrics. F1 is calculated from 
 
 ### Interrupted-training recovery
 
-Queued and running experiments are automatically re-enqueued when the application starts. Already completed trials are skipped. An interrupted trial keeps its original sampled hyperparameters and resumes from `data/runs/<experiment-id>-trial-<number>/weights/last.pt`, restoring its epoch, model weights, optimizer, and scheduler through Ultralytics. If interruption happened before the first checkpoint was written, that trial starts again from its original base model with the same hyperparameters. A user-cancelled or failed experiment is not automatically restarted.
+Queued and running experiments are automatically re-enqueued when the application starts. Already completed trials are skipped. An interrupted trial keeps its original sampled hyperparameters and resumes from `data/runs/<experiment-name>-<short-experiment-id>-trial-<number>/weights/last.pt`, restoring its epoch, model weights, optimizer, and scheduler through Ultralytics. If interruption happened before the first checkpoint was written, that trial starts again from its original base model with the same hyperparameters. A user-cancelled or failed experiment is not automatically restarted.
 
 ## Test
 

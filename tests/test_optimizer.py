@@ -44,6 +44,7 @@ def test_optimizer_completes_and_picks_best_trial(tmp_path: Path):
     assert experiment.best_trial == 3
     assert all(trial.status == "completed" for trial in experiment.trials)
     assert all(trial.hyperparameters["seed"] == 42 for trial in experiment.trials)
+    assert experiment.trials[0].run_name == f"test-{experiment.id[:8]}-trial-001"
     assert repository.get(experiment.id).best_trial == 3
 
 

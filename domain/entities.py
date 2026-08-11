@@ -128,6 +128,7 @@ class TrialResult:
     status: str = "queued"
     error: str | None = None
     run_directory: str | None = None
+    run_name: str | None = None
 
 
 @dataclass

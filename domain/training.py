@@ -32,6 +32,7 @@ class TrainingJob:
     hyperparameters: dict[str, Any]
     source_weights: str | None = None
     id: str = field(default_factory=lambda: uuid4().hex)
+    run_name: str | None = None
     status: ExperimentStatus = ExperimentStatus.QUEUED
     metrics: dict[str, float] = field(default_factory=dict)
     run_directory: str | None = None

@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from application.ports import ExperimentRepository, ModelTrainer
 from domain.entities import Experiment, ExperimentStatus, SearchSpace, TrialResult, utc_now
+from domain.naming import optimizer_run_name
 
 
 class HyperparameterOptimizer:
@@ -71,12 +72,21 @@ class HyperparameterOptimizer:
                     params = dict(trial.hyperparameters)
                     trial.error = None
                     trial.status = "running"
+                    # Persisted trials created before readable names were added use
+                    # their original folder name so checkpoint recovery still works.
+                    run_name = trial.run_name or f"{experiment.id}-trial-{number}"
                 else:
                     params = sampled_params
                     # Keep training randomness constant across trials so
                     # hyperparameters are the main changing variable.
                     params["seed"] = config.seed
-                    trial = TrialResult(number=number, hyperparameters=params, status="running")
+                    run_name = optimizer_run_name(config.name, experiment.id, number)
+                    trial = TrialResult(
+                        number=number,
+                        hyperparameters=params,
+                        status="running",
+                        run_name=run_name,
+                    )
                     experiment.trials.append(trial)
                 self.repository.save(experiment)
                 started = time.monotonic()
@@ -89,7 +99,7 @@ class HyperparameterOptimizer:
                         image_size=config.image_size,
                         device=config.device,
                         hyperparameters=params,
-                        run_name=f"{experiment.id}-trial-{number}",
+                        run_name=run_name,
                     )
                     trial.metrics = {key: float(value) for key, value in metrics.items()}
                     trial.score = self.score(trial.metrics, config.metrics)

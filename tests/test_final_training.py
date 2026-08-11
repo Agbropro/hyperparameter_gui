@@ -84,8 +84,9 @@ def test_final_trainer_uses_train_validation_and_recovers_checkpoint(tmp_path: P
     assert first_args["val"] is True
     assert first_args["data"] == job.dataset
     assert "split" not in first_args
+    assert first_args["name"] == "Final-model-fixed-id"
 
-    checkpoint = tmp_path / "fixed-id-Final-model" / "weights" / "last.pt"
+    checkpoint = tmp_path / "Final-model-fixed-id" / "weights" / "last.pt"
     checkpoint.parent.mkdir(parents=True)
     checkpoint.write_bytes(b"checkpoint")
     _, _, resumed = trainer.train(job)
