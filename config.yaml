@@ -3,7 +3,7 @@ server:
   # Use 127.0.0.1 for access from this computer only.
   # Use 0.0.0.0 to allow access from other computers on your network.
   host: 0.0.0.0
-  port: 6769
+  port: 6767
 
   # Automatically restart the development server after Python code changes.
   # Set this to false for a production deployment.
