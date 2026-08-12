@@ -4,7 +4,7 @@ A local web UI that runs randomized hyperparameter searches for Ultralytics YOLO
 
 ## Viability and scope
 
-The project is a practical MVP for single-machine experiments. Trials run sequentially by default, which avoids multiple jobs fighting for the same GPU. Search state and results survive a server restart in `data/experiments.json`; Ultralytics artifacts and each generated `hyperparameters.yaml` are saved under `data/runs/`.
+The project is a practical MVP for single-machine experiments. Trials run sequentially by default, which avoids multiple jobs fighting for the same GPU. Search, training, and validation state survives a server restart in SQLite at `data/studio.db`; Ultralytics artifacts and each generated `hyperparameters.yaml` remain under filesystem run directories. Existing JSON history is imported automatically on the first SQLite-enabled start and left untouched as a backup. See [`migrate.md`](migrate.md) before upgrading an existing installation.
 
 Random search is a sound baseline and parallelizes naturally, but it does not learn from prior trials. For large training budgets, Optuna/Bayesian sampling, pruning, GPU scheduling, and a database-backed job queue would be valuable later additions. This app reports validation metrics emitted by Ultralytics. A truly untouched test set should be evaluated once after choosing a configuration, rather than used to tune the model.
 
@@ -93,7 +93,7 @@ model.val(
 
 The page always uses the YAML `test:` split. It never evaluates on `train:` or `val:`. A low confidence such as `0.001` is recommended for standard mAP evaluation because it preserves the full precision-recall curve; increase it when comparing behavior at an operational detection threshold. The IoU control is the NMS overlap threshold, not the mAP evaluation IoU.
 
-Validation state is stored in `data/validation_jobs.json`. Ultralytics plots and artifacts are saved with readable names under:
+Validation state is stored in `data/studio.db`. Ultralytics plots and artifacts are saved with readable names under:
 
 ```text
 data/validation_runs/<comparison-name>-<short-id>-<model-number>-<model-label>/
@@ -126,7 +126,7 @@ animals/
 ```text
 domain/          entities and validation; no framework dependencies
 application/     optimizer use case and trainer/repository ports
-infrastructure/  Ultralytics, filesystem dataset, and JSON adapters
+infrastructure/  Ultralytics, filesystem datasets, SQLite, and migration adapters
 interfaces/      FastAPI routes and dependency composition
 frontend/        plain HTML, CSS, and JavaScript UI
 tests/           fast unit tests with a fake trainer

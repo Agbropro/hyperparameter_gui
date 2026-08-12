@@ -24,21 +24,25 @@ from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
 from infrastructure.experiment_importer import get_imported_experiment, read_experiment_file
 from infrastructure.final_trainer import UltralyticsFinalTrainer
-from infrastructure.repository import JsonExperimentRepository
-from infrastructure.training_repository import JsonTrainingJobRepository
 from infrastructure.yolo_trainer import UltralyticsTrainer
-from infrastructure.validation_repository import JsonValidationRepository
 from infrastructure.yolo_validator import UltralyticsModelValidator
+from infrastructure.sqlite import (
+    SqliteExperimentRepository,
+    SqliteTrainingJobRepository,
+    SqliteValidationRepository,
+    initialize_database,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("HYPER_GUI_DATA", ROOT / "data"))
-repository = JsonExperimentRepository(DATA_DIR / "experiments.json")
+DATABASE_PATH = initialize_database(DATA_DIR)
+repository = SqliteExperimentRepository(DATABASE_PATH)
 trainer = UltralyticsTrainer(DATA_DIR / "runs")
 optimizer = HyperparameterOptimizer(trainer, repository)
-training_repository = JsonTrainingJobRepository(DATA_DIR / "training_jobs.json")
+training_repository = SqliteTrainingJobRepository(DATABASE_PATH)
 final_trainer = UltralyticsFinalTrainer(DATA_DIR / "final_runs")
 final_training = FinalTrainingService(final_trainer, training_repository)
-validation_repository = JsonValidationRepository(DATA_DIR / "validation_jobs.json")
+validation_repository = SqliteValidationRepository(DATABASE_PATH)
 model_validator = UltralyticsModelValidator(DATA_DIR / "validation_runs")
 validation_service = ValidationService(model_validator, validation_repository)
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("HYPER_GUI_WORKERS", "1")))

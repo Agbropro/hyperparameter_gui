@@ -10,7 +10,7 @@ This is a local, single-machine web application for the complete YOLO experiment
 2. **Train best** — import a completed optimizer result and train a full-budget final model using the winning hyperparameters.
 3. **Validate** — compare one to twenty final `.pt` checkpoints on a held-out test split using `model.val()`.
 
-The application intentionally uses no `argparse`, no frontend framework, and no database server. It follows clean-architecture boundaries, uses FastAPI as the HTTP interface, persists local state as JSON, and uses plain HTML/CSS/JavaScript for the frontend.
+The application intentionally uses no `argparse`, no frontend framework, and no external database server. It follows clean-architecture boundaries, uses FastAPI as the HTTP interface, persists local state in SQLite, and uses plain HTML/CSS/JavaScript for the frontend. Legacy JSON histories are supported through a one-time importer.
 
 This is currently a practical MVP for a single user and normally one GPU. It is not a distributed training platform, multi-tenant service, or Optuna implementation.
 
@@ -83,7 +83,7 @@ The checked-in values may change. Never hardcode assumptions about the current p
 
 Environment variables:
 
-- `HYPER_GUI_DATA` — persistence and artifact root; defaults to `<project>/data`.
+- `HYPER_GUI_DATA` — SQLite persistence and artifact root; defaults to `<project>/data`.
 - `HYPER_GUI_WORKERS` — background executor worker count; defaults to `1` to avoid GPU contention.
 
 Stock model names may cause Ultralytics to download weights. Local `.pt` paths avoid this. The repository may contain locally downloaded `.pt` files; treat large weights as artifacts and do not casually modify or commit them.
@@ -121,8 +121,9 @@ application/
     or Ultralytics.
 
 infrastructure/
-    Adapters for Ultralytics, JSON persistence, YAML/filesystem inspection, and
-    experiment importing. May depend on application/domain.
+    Adapters for Ultralytics, SQLite persistence, legacy JSON migration,
+    YAML/filesystem inspection, and experiment importing. May depend on
+    application/domain.
 
 interfaces/
     FastAPI routes and dependency composition. Converts HTTP requests into
@@ -152,7 +153,8 @@ Key files:
 - `application/services.py` — random sampler, objective scoring, trial orchestration and recovery.
 - `application/ports.py` — trainer/repository protocols.
 - `infrastructure/yolo_trainer.py` — calls Ultralytics `YOLO(...).train()`.
-- `infrastructure/repository.py` — `experiments.json` persistence.
+- `infrastructure/sqlite.py` — active SQLite persistence and legacy JSON migration.
+- `infrastructure/repository.py` — legacy JSON repository retained for migration/tests.
 - `infrastructure/datasets.py` — dataset discovery and coarse validation.
 
 Search behavior:
@@ -263,28 +265,26 @@ Per-class `Images` usually means the number of evaluated images containing at le
 
 ## 10. Persistence and artifact layout
 
-There is no relational database. State is stored as JSON under `HYPER_GUI_DATA` (default `data/`):
+SQLite is the active relational metadata store under `HYPER_GUI_DATA` (default `data/`). There is no separate database server:
 
 ```text
 data/
-├── experiments.json       # Optimizer experiments and every trial
-├── training_jobs.json     # Final-training jobs
-├── validation_jobs.json   # Validation comparisons and per-class metrics
+├── studio.db              # Active SQLite metadata database
+├── experiments.json       # Preserved legacy migration source/backup
+├── training_jobs.json     # Preserved legacy migration source/backup
+├── validation_jobs.json   # Preserved legacy migration source/backup
 ├── runs/                  # Optimizer checkpoints and plots
 ├── final_runs/            # Final checkpoints and plots
 └── validation_runs/       # model.val plots/artifacts
 ```
 
-Repositories use:
+SQLite repositories use one connection per operation, foreign-key enforcement, WAL journal mode, a five-second busy timeout, short transactions, indexes for status/time, and hydration back into domain dataclasses/enums. Optimizer trials and validation models are child tables; flexible configs, metrics, hyperparameters, and per-class rows remain JSON payloads inside SQLite.
 
-- A process-local `threading.RLock`.
-- Read-modify-write of the whole JSON object.
-- A sibling `.tmp` file followed by an atomic replace.
-- Hydration back into dataclasses and enums.
+`initialize_database()` atomically creates `studio.db.migrating`, imports any legacy JSON histories, runs integrity and foreign-key checks, renames the verified database into place, and leaves source JSON unchanged. Once `studio.db` exists, legacy JSON is no longer read or updated. See `migrate.md` for backup, verification, and rollback.
 
-This is suitable for the current single-process/single-user MVP. It is not safe as a robust multi-process database. If scale or multi-user support is added, SQLite is the most natural first migration, followed by PostgreSQL plus a real job queue for distributed workloads.
+This remains a single-process/single-user design. SQLite is reliable for the workload, but the process-local executor and active-ID sets are not a distributed job system. Use PostgreSQL plus a real job queue if multi-process, multi-user, or multi-machine operation is introduced.
 
-Do not edit a persisted JSON schema without adding backward-compatible hydration defaults or a migration. Existing jobs and experiment files matter to users.
+Do not edit a persisted schema without a versioned schema migration and backward-compatible hydration. Existing jobs and experiment files matter to users. Do not casually delete legacy JSON files; they are rollback backups.
 
 ## 11. Artifact naming and backward compatibility
 
@@ -456,7 +456,7 @@ Before any public/multi-user deployment, add at least:
 - A restricted allowlist of dataset/model/result roots.
 - CSRF/security review appropriate to deployment.
 - Rate limits and quotas.
-- A real transactional database.
+- Authentication-aware database access and versioned migrations appropriate to deployment.
 - A process/job queue with GPU resource management.
 - Structured logging and audit events.
 - Safer file upload/selection rather than arbitrary server path entry.
@@ -466,7 +466,7 @@ Before any public/multi-user deployment, add at least:
 ## 18. Known limitations and future improvements
 
 - Despite user experiment labels, there is no Optuna/Bayesian optimization, pruning, or early-stopping search strategy.
-- The whole JSON document is rewritten on each update; large histories will eventually need a database.
+- SQLite currently stores some flexible structures as JSON payload columns; frequently queried metrics may eventually deserve normalized/indexed columns.
 - `ThreadPoolExecutor` jobs live in the web process. Multi-worker ASGI deployment would break the current single-process coordination assumptions.
 - There is no live epoch progress because no Ultralytics callbacks are registered.
 - Cancellation only exists between optimizer trials.
@@ -483,7 +483,7 @@ Before any public/multi-user deployment, add at least:
 2. Inspect the worktree and preserve user changes, especially frontend branding and `config.yaml` values.
 3. Identify which architectural layer owns the new behavior.
 4. Update domain/application contracts before wiring infrastructure and routes.
-5. Keep persistence changes backward-compatible.
+5. Keep SQLite schema and legacy JSON migration changes backward-compatible.
 6. Add or update the UI without breaking IDs consumed by JavaScript.
 7. Add focused tests using fakes rather than real GPU work.
 8. Run compilation, all JS syntax checks, and `pytest -q`.
@@ -515,9 +515,10 @@ infrastructure/
 ├── configuration.py           config.yaml loader
 ├── datasets.py                Dataset discovery
 ├── experiment_importer.py     Import experiments.json winner
-├── repository.py              Optimizer JSON repository
-├── training_repository.py     Final-training JSON repository
-├── validation_repository.py   Validation JSON repository
+├── sqlite.py                  Active schema, migration, SQLite repositories
+├── repository.py              Legacy optimizer JSON repository/import helper
+├── training_repository.py     Legacy final-training JSON repository/import helper
+├── validation_repository.py   Legacy validation JSON repository/import helper
 ├── yolo_trainer.py            Optimizer Ultralytics adapter
 ├── final_trainer.py           Final-training Ultralytics adapter
 └── yolo_validator.py          model.val comparison adapter
@@ -534,4 +535,5 @@ main.py                        ASGI export and config-driven launcher
 config.yaml                    Host, port, reload
 README.md                      User/developer overview
 custom_gui.md                  Beginner frontend customization guide
+migrate.md                     SQLite backup, migration, verification, rollback
 ```
