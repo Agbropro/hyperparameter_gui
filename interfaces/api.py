@@ -16,8 +16,10 @@ from pydantic import BaseModel, Field
 
 from application.services import HyperparameterOptimizer
 from application.final_training import FinalTrainingService
+from application.validation import ValidationService
 from domain.entities import Experiment, ExperimentConfig, Range, SearchSpace, SUPPORTED_METRICS, TaskType
 from domain.training import TrainingJob, TrainingMode
+from domain.validation import ModelValidationResult, ValidationJob
 from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
 from infrastructure.experiment_importer import get_imported_experiment, read_experiment_file
@@ -25,6 +27,8 @@ from infrastructure.final_trainer import UltralyticsFinalTrainer
 from infrastructure.repository import JsonExperimentRepository
 from infrastructure.training_repository import JsonTrainingJobRepository
 from infrastructure.yolo_trainer import UltralyticsTrainer
+from infrastructure.validation_repository import JsonValidationRepository
+from infrastructure.yolo_validator import UltralyticsModelValidator
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("HYPER_GUI_DATA", ROOT / "data"))
@@ -34,10 +38,15 @@ optimizer = HyperparameterOptimizer(trainer, repository)
 training_repository = JsonTrainingJobRepository(DATA_DIR / "training_jobs.json")
 final_trainer = UltralyticsFinalTrainer(DATA_DIR / "final_runs")
 final_training = FinalTrainingService(final_trainer, training_repository)
+validation_repository = JsonValidationRepository(DATA_DIR / "validation_jobs.json")
+model_validator = UltralyticsModelValidator(DATA_DIR / "validation_runs")
+validation_service = ValidationService(model_validator, validation_repository)
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("HYPER_GUI_WORKERS", "1")))
 cancel_events: dict[str, threading.Event] = {}
 active_training_jobs: set[str] = set()
 active_training_lock = threading.Lock()
+active_validation_jobs: set[str] = set()
+active_validation_lock = threading.Lock()
 
 def enqueue_experiment(experiment: Experiment) -> None:
     """Queue an experiment once, including recovery after an app restart."""
@@ -61,6 +70,22 @@ def enqueue_training_job(job: TrainingJob) -> None:
     executor.submit(run)
 
 
+def enqueue_validation_job(job: ValidationJob) -> None:
+    with active_validation_lock:
+        if job.id in active_validation_jobs:
+            return
+        active_validation_jobs.add(job.id)
+
+    def run() -> None:
+        try:
+            validation_service.run(job)
+        finally:
+            with active_validation_lock:
+                active_validation_jobs.discard(job.id)
+
+    executor.submit(run)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     for experiment in repository.list():
@@ -69,6 +94,9 @@ async def lifespan(_: FastAPI):
     for job in training_repository.list():
         if job.status.value in ("queued", "running"):
             enqueue_training_job(job)
+    for job in validation_repository.list():
+        if job.status.value in ("queued", "running"):
+            enqueue_validation_job(job)
     yield
 
 
@@ -122,6 +150,22 @@ class TrainingJobRequest(BaseModel):
     device: str | int | None = None
 
 
+class ValidationModelRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    path: str = Field(min_length=1)
+
+
+class ValidationJobRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    dataset: str = Field(min_length=1)
+    models: list[ValidationModelRequest] = Field(min_length=1, max_length=20)
+    confidence: float = Field(default=0.001, ge=0.0, le=1.0)
+    iou: float = Field(default=0.7, ge=0.0, le=1.0)
+    image_size: int = Field(default=640, ge=32)
+    batch: int = Field(default=16, ge=1)
+    device: str | int | None = None
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(ROOT / "frontend" / "index.html")
@@ -130,6 +174,11 @@ def index() -> FileResponse:
 @app.get("/training")
 def training_page() -> FileResponse:
     return FileResponse(ROOT / "frontend" / "training.html")
+
+
+@app.get("/validation")
+def validation_page() -> FileResponse:
+    return FileResponse(ROOT / "frontend" / "validation.html")
 
 
 @app.get("/api/health")
@@ -333,3 +382,82 @@ def _ensure_train_and_val_only(dataset: str, task: TaskType) -> None:
     missing = [split for split in ("train", "val") if not document.get(split)]
     if missing:
         raise ValueError(f"dataset YAML must define {', '.join(missing)}")
+
+
+@app.get("/api/validation/jobs")
+def list_validation_jobs() -> list[dict[str, Any]]:
+    return [job.to_dict() for job in validation_repository.list()]
+
+
+@app.get("/api/validation/jobs/{job_id}")
+def get_validation_job(job_id: str) -> dict[str, Any]:
+    job = validation_repository.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="validation job not found")
+    return job.to_dict()
+
+
+@app.post("/api/validation/jobs", status_code=202)
+def create_validation_job(request: ValidationJobRequest) -> dict[str, Any]:
+    try:
+        dataset = Path(request.dataset).expanduser().resolve()
+        if not dataset.is_file():
+            raise ValueError(f"dataset YAML does not exist: {dataset}")
+        _ensure_test_split(dataset)
+        models: list[ModelValidationResult] = []
+        seen: set[str] = set()
+        for item in request.models:
+            path = Path(item.path).expanduser().resolve()
+            if not path.is_file():
+                raise ValueError(f"model weights do not exist: {path}")
+            if path.suffix.lower() != ".pt":
+                raise ValueError(f"model must be a .pt checkpoint: {path}")
+            if str(path) in seen:
+                raise ValueError(f"duplicate model path: {path}")
+            seen.add(str(path))
+            models.append(ModelValidationResult(label=item.label.strip(), model_path=str(path)))
+        job = ValidationJob(
+            name=request.name.strip(),
+            dataset=str(dataset),
+            split="test",
+            confidence=request.confidence,
+            iou=request.iou,
+            image_size=request.image_size,
+            batch=request.batch,
+            device=request.device,
+            models=models,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    validation_repository.save(job)
+    enqueue_validation_job(job)
+    return job.to_dict()
+
+
+@app.post("/api/validation/jobs/{job_id}/retry", status_code=202)
+def retry_validation_job(job_id: str) -> dict[str, Any]:
+    job = validation_repository.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="validation job not found")
+    failed = [model for model in job.models if model.status == "failed"]
+    if not failed:
+        raise HTTPException(status_code=409, detail="this job has no failed model validations")
+    for model in failed:
+        model.status = "queued"
+        model.error = None
+    job.status = job.status.__class__.QUEUED
+    job.error = None
+    validation_repository.save(job)
+    enqueue_validation_job(job)
+    return job.to_dict()
+
+
+def _ensure_test_split(dataset: Path) -> None:
+    import yaml
+
+    try:
+        document = yaml.safe_load(dataset.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"could not read dataset YAML: {exc}") from exc
+    if not isinstance(document, dict) or not document.get("test"):
+        raise ValueError("dataset YAML must define a test split for held-out validation")

@@ -8,6 +8,13 @@ You do not need to understand JavaScript to change the name, wording, colors, or
 | `frontend/styles.css` | Appearance | Change colors, spacing, fonts, sizes, and shapes |
 | `frontend/app.js` | Behavior and backend data | Change dynamic model choices, submission behavior, or result rendering |
 
+The separate final-training and validation pages use these additional files:
+
+| Page | Content and appearance | Behavior |
+| --- | --- | --- |
+| Train best | `frontend/training.html`, `frontend/training.css` | `frontend/training.js` |
+| Validate | `frontend/validation.html`, `frontend/validation.css` | `frontend/validation.js` |
+
 For simple visual customization, you will mostly edit `index.html` and `styles.css`. Avoid changing IDs such as `id="experiment-form"`; JavaScript uses those IDs to find elements.
 
 ## Change the title shown in the screenshot

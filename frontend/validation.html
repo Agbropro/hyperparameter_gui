@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compare Models · Nicholas Ganteng</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/validation.css" />
+  </head>
+  <body>
+    <div class="glow glow-a"></div><div class="glow glow-b"></div>
+    <header class="topbar">
+      <a class="brand" href="/"><span class="mark">N</span><span>Nicholas <b>Ganteng</b></span></a>
+      <nav class="topnav"><a href="/">Optimize</a><a href="/training">Train best</a><a class="active" href="/validation">Validate</a></nav>
+      <div class="system-state"><span class="pulse"></span> Held-out evaluation</div>
+    </header>
+    <main>
+      <section class="hero validation-hero">
+        <div><p class="eyebrow">MODEL COMPARISON / 03</p><h1>Put every model<br />on the <em>same test.</em></h1></div>
+        <p class="hero-copy">Validate up to 20 checkpoints against the dataset YAML test split. Compare precision, recall, F1, mAP, and inference speed under identical confidence and IoU settings.</p>
+      </section>
+      <section class="validation-layout">
+        <form id="validation-form" class="panel validation-form">
+          <div class="panel-heading"><div><span class="step">01</span><h2>Validation setup</h2></div><span class="muted">model.val()</span></div>
+          <div class="grid-2 no-top">
+            <label class="field"><span>Comparison name</span><input name="name" value="Model comparison" required /></label>
+            <label class="field"><span>Dataset YAML</span><input name="dataset" placeholder="/path/to/data.yaml" required /></label>
+          </div>
+          <div class="test-contract"><b>Held-out split only</b><span>This page always calls <code>split="test"</code>. It never validates against train or val.</span></div>
+          <div class="control-grid">
+            <label class="field"><span>Models to compare</span><input id="model-count" type="number" value="2" min="1" max="20" /></label>
+            <label class="field"><span>Image size</span><input name="image_size" type="number" value="640" min="32" step="32" /></label>
+            <label class="field"><span>Batch</span><input name="batch" type="number" value="16" min="1" /></label>
+            <label class="field"><span>Device</span><input name="device" placeholder="auto, cpu, 0" /></label>
+          </div>
+          <div class="thresholds">
+            <label class="threshold"><div><span>Confidence threshold</span><output id="conf-output">0.001</output></div><input name="confidence" id="confidence" type="range" min="0" max="1" step="0.001" value="0.001" /><small>Lower values usually preserve recall; higher values suppress weak predictions.</small></label>
+            <label class="threshold"><div><span>NMS IoU threshold</span><output id="iou-output">0.70</output></div><input name="iou" id="iou" type="range" min="0" max="1" step="0.01" value="0.70" /><small>Controls how strongly overlapping detections are removed during validation.</small></label>
+          </div>
+          <div class="models-heading"><span>Checkpoint labels and paths</span><small>Use each final run's weights/best.pt</small></div>
+          <div id="model-inputs" class="model-inputs"></div>
+          <div id="validation-message" class="message" hidden></div>
+          <button class="primary" type="submit"><span>Validate and compare</span><span>↗</span></button>
+        </form>
+        <aside class="panel validation-history">
+          <div class="panel-heading"><div><span class="step">02</span><h2>Validation history</h2></div><button id="refresh-validation" class="icon-button">↻</button></div>
+          <div id="validation-jobs"><div class="empty"><span>◇</span><p>No comparisons yet</p><small>Validation jobs will appear here.</small></div></div>
+        </aside>
+      </section>
+      <section id="comparison-results" class="panel comparison-results" hidden>
+        <div class="results-title"><div><p class="eyebrow">COMPARISON RESULTS</p><h2 id="comparison-name"></h2><p id="comparison-settings"></p></div><label class="field metric-select"><span>Graph metric</span><select id="chart-metric"></select></label></div>
+        <div class="chart-wrap"><canvas id="metric-chart" aria-label="Model metric comparison chart"></canvas></div>
+        <div id="winner-callout"></div>
+        <div class="comparison-table-wrap"><table class="comparison-table"><thead id="comparison-head"></thead><tbody id="comparison-body"></tbody></table></div>
+        <div id="per-class-results"></div>
+      </section>
+    </main>
+    <script src="/assets/validation.js" defer></script>
+  </body>
+</html>

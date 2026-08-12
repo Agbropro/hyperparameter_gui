@@ -67,6 +67,40 @@ The final-training adapter passes the dataset to `model.train(..., val=True)` an
 
 If final training is interrupted after at least one epoch, its own `weights/last.pt` is used with `resume=True`, restoring the optimizer, scheduler, and epoch. Queued/running final jobs recover automatically after an application restart. Failed jobs also have a manual **Resume from last checkpoint** action; if no checkpoint was written, the same job starts again from its original source and configuration.
 
+## Validate and compare final models
+
+Open <http://127.0.0.1:8000/validation> or select **Validate** in the header. This page performs held-out evaluation with Ultralytics `model.val()`:
+
+1. Enter a comparison name and a detection/segmentation dataset YAML that defines `test:`.
+2. Choose between 1 and 20 models, give each a readable label, and paste each `.pt` checkpoint path.
+3. Set confidence, NMS IoU, image size, batch size, and device.
+4. Start validation. Models run sequentially so they do not compete for the same GPU.
+5. Select a completed comparison to inspect the metric chart, full metric table, best values, and per-class results.
+
+Every checkpoint is evaluated with the same arguments:
+
+```python
+model.val(
+    data="/path/to/data.yaml",
+    split="test",
+    conf=0.001,
+    iou=0.7,
+    imgsz=640,
+    batch=16,
+    plots=True,
+)
+```
+
+The page always uses the YAML `test:` split. It never evaluates on `train:` or `val:`. A low confidence such as `0.001` is recommended for standard mAP evaluation because it preserves the full precision-recall curve; increase it when comparing behavior at an operational detection threshold. The IoU control is the NMS overlap threshold, not the mAP evaluation IoU.
+
+Validation state is stored in `data/validation_jobs.json`. Ultralytics plots and artifacts are saved with readable names under:
+
+```text
+data/validation_runs/<comparison-name>-<short-id>-<model-number>-<model-label>/
+```
+
+Queued and running comparisons recover after an application restart. Completed model results are skipped during recovery, and a partially failed comparison can retry only its failed checkpoints.
+
 ## Dataset layouts
 
 Detection and segmentation accept either a dataset YAML path or a folder containing `data.yaml`, `dataset.yaml`, or another top-level `.yaml` file.
