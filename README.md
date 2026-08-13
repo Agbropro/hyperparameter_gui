@@ -13,7 +13,7 @@ sqlite3 data/studio.db "SELECT created_at, type, title, message, page, status FR
 ```
 
 The success message shows the exact active database path. Use that path when `HYPER_GUI_DATA` changes the data directory, and refresh an already-open SQLite viewer after submitting.
-Ticket writes also checkpoint SQLite's WAL immediately so database viewers that only watch the main `studio.db` file can discover new rows without restarting the application.
+The application runs a non-blocking SQLite WAL checkpoint every 10 seconds. This lets database viewers that only watch the main `studio.db` file discover recent rows without forcing a checkpoint for every ticket submission.
 
 Random search is a sound baseline and parallelizes naturally, but it does not learn from prior trials. For large training budgets, Optuna/Bayesian sampling, pruning, GPU scheduling, and a database-backed job queue would be valuable later additions. This app reports validation metrics emitted by Ultralytics. A truly untouched test set should be evaluated once after choosing a configuration, rather than used to tune the model.
 

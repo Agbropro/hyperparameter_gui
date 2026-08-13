@@ -284,6 +284,8 @@ data/
 
 SQLite repositories use one connection per operation, foreign-key enforcement, WAL journal mode, a five-second busy timeout, short transactions, indexes for status/time, and hydration back into domain dataclasses/enums. Optimizer trials and validation models are child tables; flexible configs, metrics, hyperparameters, and per-class rows remain JSON payloads inside SQLite.
 
+The FastAPI lifespan starts one daemon thread that attempts a non-blocking `PASSIVE` WAL checkpoint every 10 seconds and stops it during shutdown. Do not move checkpointing back into individual ticket writes; the periodic checkpoint exists only to help external database viewers notice recent rows without adding latency to each submission.
+
 The `tickets` table stores `id`, `title`, `type` (`feature`, `bug`, or `misc`), `message`, originating `page`, `status`, and `created_at`. Ticket history is intentionally database-only for now. Developers can query it with `sqlite3 data/studio.db "SELECT * FROM tickets ORDER BY created_at DESC;"`.
 
 `initialize_database()` atomically creates `studio.db.migrating`, imports any legacy JSON histories, runs integrity and foreign-key checks, renames the verified database into place, and leaves source JSON unchanged. Once `studio.db` exists, legacy JSON is no longer read or updated. See `migrate.md` for backup, verification, and rollback.

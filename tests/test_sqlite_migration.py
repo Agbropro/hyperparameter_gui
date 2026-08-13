@@ -13,6 +13,7 @@ from infrastructure.sqlite import (
     SqliteTicketRepository,
     SqliteTrainingJobRepository,
     SqliteValidationRepository,
+    checkpoint_database,
     database_summary,
     initialize_database,
 )
@@ -100,6 +101,7 @@ def test_ticket_repository_persists_developer_visible_reports(tmp_path: Path):
     assert loaded.status == "new"
     assert repository.list()[0].page == "/training"
     assert database_summary(database)["tickets"] == 1
+    assert checkpoint_database(database) is True
 
 
 def test_invalid_legacy_json_aborts_without_replacing_database(tmp_path: Path):

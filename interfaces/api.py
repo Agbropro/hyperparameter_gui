@@ -33,6 +33,7 @@ from infrastructure.sqlite import (
     SqliteTrainingJobRepository,
     SqliteValidationRepository,
     SqliteTicketRepository,
+    checkpoint_database,
     initialize_database,
 )
 
@@ -56,6 +57,7 @@ active_training_jobs: set[str] = set()
 active_training_lock = threading.Lock()
 active_validation_jobs: set[str] = set()
 active_validation_lock = threading.Lock()
+SQLITE_CHECKPOINT_INTERVAL_SECONDS = 10
 
 def enqueue_experiment(experiment: Experiment) -> None:
     """Queue an experiment once, including recovery after an app restart."""
@@ -97,6 +99,14 @@ def enqueue_validation_job(job: ValidationJob) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    checkpoint_stop = threading.Event()
+    checkpoint_thread = threading.Thread(
+        target=_run_periodic_checkpoint,
+        args=(checkpoint_stop,),
+        name="sqlite-checkpoint",
+        daemon=True,
+    )
+    checkpoint_thread.start()
     for experiment in repository.list():
         if experiment.status.value in ("queued", "running"):
             enqueue_experiment(experiment)
@@ -106,7 +116,17 @@ async def lifespan(_: FastAPI):
     for job in validation_repository.list():
         if job.status.value in ("queued", "running"):
             enqueue_validation_job(job)
-    yield
+    try:
+        yield
+    finally:
+        checkpoint_stop.set()
+        checkpoint_thread.join(timeout=1)
+        checkpoint_database(DATABASE_PATH)
+
+
+def _run_periodic_checkpoint(stop: threading.Event) -> None:
+    while not stop.wait(SQLITE_CHECKPOINT_INTERVAL_SECONDS):
+        checkpoint_database(DATABASE_PATH)
 
 
 app = FastAPI(title="YOLO Hyperparameter Studio", version="1.0.0", lifespan=lifespan)

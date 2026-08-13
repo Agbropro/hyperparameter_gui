@@ -72,6 +72,17 @@ def _connect(path: Path) -> sqlite3.Connection:
     return connection
 
 
+def checkpoint_database(path: Path) -> bool:
+    """Best-effort non-blocking WAL flush for external database viewers."""
+    try:
+        with _connect(path) as connection:
+            busy, _, _ = connection.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+        return not bool(busy)
+    except sqlite3.OperationalError as exc:
+        logger.warning("Could not checkpoint SQLite WAL for %s: %s", path, exc)
+        return False
+
+
 def _create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
@@ -287,18 +298,6 @@ class _SqliteRepository:
             callback(connection)
             connection.commit()
 
-    def _checkpoint_for_external_readers(self) -> None:
-        """Flush WAL data so simple database viewers see a recent write."""
-        try:
-            with _connect(self.path) as connection:
-                busy, _, _ = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-            if busy:
-                logger.warning("SQLite WAL checkpoint was busy for %s", self.path)
-        except sqlite3.OperationalError as exc:
-            # The committed row remains valid even if another reader temporarily
-            # prevents the optional viewer-compatibility checkpoint.
-            logger.warning("Could not checkpoint SQLite WAL for %s: %s", self.path, exc)
-
 
 class SqliteExperimentRepository(_SqliteRepository):
     def save(self, experiment: Experiment) -> None:
@@ -397,7 +396,6 @@ class SqliteTicketRepository(_SqliteRepository):
                 ),
             )
         )
-        self._checkpoint_for_external_readers()
 
     def get(self, ticket_id: str) -> Ticket | None:
         with _connect(self.path) as connection:
