@@ -140,12 +140,9 @@ function drawChart() {
   models.forEach((model, index) => { const value = Number(model.metrics[metric]); const barHeight = value / maximum * height; const x = pad.left + slot * index + (slot - barWidth) / 2; const y = pad.top + height - barHeight; ctx.fillStyle = colors[index % colors.length]; ctx.beginPath(); ctx.roundRect(x, y, barWidth, barHeight, 5); ctx.fill(); ctx.fillStyle = "#12130f"; ctx.textAlign = "center"; ctx.font = "10px DM Mono"; ctx.fillText(metricValue(value, metric), x + barWidth / 2, Math.max(12, y - 7)); ctx.fillStyle = "#727369"; ctx.font = "9px Manrope"; const label = model.label.length > 18 ? `${model.label.slice(0, 16)}…` : model.label; ctx.fillText(label, x + barWidth / 2, pad.top + height + 22); });
 }
 
-function syncThreshold(input, output, digits) { $(output).textContent = Number($(input).value).toFixed(digits); }
 async function init() {
   renderModelInputs();
   $("#model-count").addEventListener("change", renderModelInputs);
-  $("#confidence").addEventListener("input", () => syncThreshold("#confidence", "#conf-output", 3));
-  $("#iou").addEventListener("input", () => syncThreshold("#iou", "#iou-output", 2));
   $("#validation-form").addEventListener("submit", submitValidation);
   $("#refresh-validation").addEventListener("click", loadJobs);
   $("#chart-metric").addEventListener("change", () => { const job = selectedJob(); renderTable(job, availableMetrics(job)); drawChart(); });

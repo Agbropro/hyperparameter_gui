@@ -20,6 +20,7 @@ from application.validation import ValidationService
 from domain.entities import Experiment, ExperimentConfig, Range, SearchSpace, SUPPORTED_METRICS, TaskType
 from domain.training import TrainingJob, TrainingMode
 from domain.validation import ModelValidationResult, ValidationJob
+from domain.ticket import Ticket, TicketType
 from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
 from infrastructure.experiment_importer import get_imported_experiment, read_dataset_splits, read_experiment_file
@@ -30,6 +31,7 @@ from infrastructure.sqlite import (
     SqliteExperimentRepository,
     SqliteTrainingJobRepository,
     SqliteValidationRepository,
+    SqliteTicketRepository,
     initialize_database,
 )
 
@@ -45,6 +47,7 @@ final_training = FinalTrainingService(final_trainer, training_repository)
 validation_repository = SqliteValidationRepository(DATABASE_PATH)
 model_validator = UltralyticsModelValidator(DATA_DIR / "validation_runs")
 validation_service = ValidationService(model_validator, validation_repository)
+ticket_repository = SqliteTicketRepository(DATABASE_PATH)
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("HYPER_GUI_WORKERS", "1")))
 cancel_events: dict[str, threading.Event] = {}
 active_training_jobs: set[str] = set()
@@ -168,6 +171,13 @@ class ValidationJobRequest(BaseModel):
     image_size: int = Field(default=640, ge=32)
     batch: int = Field(default=16, ge=1)
     device: str | int | None = None
+
+
+class TicketRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    type: TicketType
+    message: str = Field(min_length=5, max_length=5000)
+    page: str | None = Field(default=None, max_length=500)
 
 
 @app.get("/")
@@ -522,3 +532,20 @@ def _ensure_test_split(dataset: Path) -> None:
         raise ValueError(f"could not read dataset YAML: {exc}") from exc
     if not isinstance(document, dict) or not document.get("test"):
         raise ValueError("dataset YAML must define a test split for held-out validation")
+
+
+@app.post("/api/tickets", status_code=201)
+def create_ticket(request: TicketRequest) -> dict[str, str]:
+    """Accept a ticket; reading remains database-only for now."""
+    title = request.title.strip()
+    message = request.message.strip()
+    if len(title) < 3 or len(message) < 5:
+        raise HTTPException(status_code=422, detail="title and description cannot be blank")
+    ticket = Ticket(
+        title=title,
+        type=request.type,
+        message=message,
+        page=request.page.strip() if request.page else None,
+    )
+    ticket_repository.save(ticket)
+    return {"id": ticket.id, "status": ticket.status}

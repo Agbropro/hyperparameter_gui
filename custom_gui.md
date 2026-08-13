@@ -15,6 +15,8 @@ The separate final-training and validation pages use these additional files:
 | Train best | `frontend/training.html`, `frontend/training.css` | `frontend/training.js` |
 | Validate | `frontend/validation.html`, `frontend/validation.css` | `frontend/validation.js` |
 
+The ticket popup is shared by every page. Edit `frontend/ticket.css` to change its yellow/orange appearance and `frontend/ticket.js` to change its fields or behavior. Each page contains a `data-ticket-open` button that opens it.
+
 For simple visual customization, you will mostly edit `index.html` and `styles.css`. Avoid changing IDs such as `id="experiment-form"`; JavaScript uses those IDs to find elements.
 
 ## Change the title shown in the screenshot

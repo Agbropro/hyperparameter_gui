@@ -1,0 +1,34 @@
+.ticket-trigger {
+  border: 1px solid #171810;
+  border-radius: 8px;
+  background: #fff0a8;
+  color: #171810;
+  padding: 6px 11px;
+  font: 700 10px Manrope, sans-serif;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ticket-trigger:hover { background: #ffe36e; transform: translateY(-1px); }
+.ticket-modal[hidden] { display: none; }
+.ticket-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; }
+.ticket-backdrop { position: absolute; inset: 0; background: rgba(18, 19, 15, .58); backdrop-filter: blur(5px); }
+.ticket-card {
+  position: relative; width: min(500px, 100%); padding: 30px; border: 2px solid #ef8c00;
+  border-radius: 22px; background: #fff0a8; box-shadow: 0 22px 70px rgba(18, 19, 15, .3);
+}
+.ticket-card h2 { margin: 0 0 5px; font-size: 25px; }
+.ticket-card > p { margin: 0 0 20px; color: #725716; font-size: 12px; }
+.ticket-close { position: absolute; top: 12px; right: 14px; border: 0; background: transparent; color: #ef8c00; font-size: 28px; line-height: 1; cursor: pointer; }
+.ticket-form { display: grid; gap: 14px; }
+.ticket-form label { display: grid; gap: 6px; }
+.ticket-form label > span { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.ticket-form input, .ticket-form select, .ticket-form textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid #ef8c00; border-radius: 10px;
+  background: #fff9db; color: #171810; padding: 11px 12px; font: 500 13px Manrope, sans-serif;
+}
+.ticket-form textarea { min-height: 145px; resize: vertical; }
+.ticket-submit { border: 1px solid #171810; border-radius: 9px; background: #fff5c9; padding: 11px; font-weight: 800; cursor: pointer; }
+.ticket-submit:disabled { opacity: .55; cursor: wait; }
+.ticket-feedback { margin: 0; padding: 10px; border-radius: 8px; background: rgba(255,255,255,.55); font-size: 11px; }
+.ticket-feedback.error { color: #9d251b; background: #ffd8c9; }
+@media (max-width: 760px) { .ticket-card { padding: 24px 18px; }.ticket-trigger { padding: 6px 8px; } }

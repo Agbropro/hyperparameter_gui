@@ -6,6 +6,12 @@ A local web UI that runs randomized hyperparameter searches for Ultralytics YOLO
 
 The project is a practical MVP for single-machine experiments. Trials run sequentially by default, which avoids multiple jobs fighting for the same GPU. Search, training, and validation state survives a server restart in SQLite at `data/studio.db`; Ultralytics artifacts and each generated `hyperparameters.yaml` remain under filesystem run directories. Existing JSON history is imported automatically on the first SQLite-enabled start and left untouched as a backup. See [`migrate.md`](migrate.md) before upgrading an existing installation.
 
+The **Ticket** button in every page lets users submit a feature request, bug report, or miscellaneous note. Tickets are stored only in the `tickets` table in `data/studio.db`; there is intentionally no public ticket-history page or read API yet. A developer can inspect them with:
+
+```bash
+sqlite3 data/studio.db "SELECT created_at, type, title, message, page, status FROM tickets ORDER BY created_at DESC;"
+```
+
 Random search is a sound baseline and parallelizes naturally, but it does not learn from prior trials. For large training budgets, Optuna/Bayesian sampling, pruning, GPU scheduling, and a database-backed job queue would be valuable later additions. This app reports validation metrics emitted by Ultralytics. A truly untouched test set should be evaluated once after choosing a configuration, rather than used to tune the model.
 
 The **Randomization ranges** section controls random search. Each trial samples a new value between the minimum and maximum for every numeric hyperparameter, and randomly selects one batch size and optimizer from their lists. A fixed random seed makes the sequence repeatable; it does not stop the values from being randomized. For example, rerunning seed `42` reproduces the same sequence of Trial 1, Trial 2, and Trial 3 samples, while those three trials still differ from one another. Use the **Parameter help** card in that section to replace the controls with plain-language explanations and the currently configured sampling range of every setting; switching back preserves the values you entered.
@@ -70,6 +76,8 @@ If final training is interrupted after at least one epoch, its own `weights/last
 ## Validate and compare final models
 
 Open <http://127.0.0.1:8000/validation> or select **Validate** in the header. This page performs held-out evaluation with Ultralytics `model.val()`:
+
+Confidence and NMS IoU are exact numeric inputs from `0` through `1`, so values can be typed instead of approximated with sliders.
 
 1. Enter a comparison name and a detection/segmentation dataset YAML that defines `test:`.
 2. Choose between 1 and 20 models, give each a readable label, and paste each `.pt` checkpoint path.

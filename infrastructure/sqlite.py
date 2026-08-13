@@ -14,12 +14,13 @@ from typing import Any, Callable, TypeVar
 from domain.entities import Experiment
 from domain.training import TrainingJob
 from domain.validation import ValidationJob
+from domain.ticket import Ticket, TicketType
 from infrastructure.repository import JsonExperimentRepository
 from infrastructure.training_repository import JsonTrainingJobRepository
 from infrastructure.validation_repository import JsonValidationRepository
 
 T = TypeVar("T")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def initialize_database(data_dir: Path) -> Path:
@@ -133,6 +134,19 @@ def _create_schema(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_validation_status ON validation_jobs(status);
         CREATE INDEX IF NOT EXISTS idx_validation_created ON validation_jobs(created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS tickets (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('feature', 'bug', 'misc')),
+            message TEXT NOT NULL,
+            page TEXT,
+            status TEXT NOT NULL DEFAULT 'new',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+        CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at DESC);
         """
     )
     connection.execute(
@@ -352,6 +366,47 @@ class SqliteValidationRepository(_SqliteRepository):
         return [json.loads(row["payload_json"]) for row in rows]
 
 
+class SqliteTicketRepository(_SqliteRepository):
+    def save(self, ticket: Ticket) -> None:
+        self._write(
+            lambda connection: connection.execute(
+                """INSERT INTO tickets(id, title, type, message, page, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    ticket.id,
+                    ticket.title,
+                    ticket.type.value,
+                    ticket.message,
+                    ticket.page,
+                    ticket.status,
+                    ticket.created_at,
+                ),
+            )
+        )
+
+    def get(self, ticket_id: str) -> Ticket | None:
+        with _connect(self.path) as connection:
+            row = connection.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+        return self._hydrate(row) if row else None
+
+    def list(self) -> list[Ticket]:
+        with _connect(self.path) as connection:
+            rows = connection.execute("SELECT * FROM tickets ORDER BY created_at DESC").fetchall()
+        return [self._hydrate(row) for row in rows]
+
+    @staticmethod
+    def _hydrate(row: sqlite3.Row) -> Ticket:
+        return Ticket(
+            id=row["id"],
+            title=row["title"],
+            type=TicketType(row["type"]),
+            message=row["message"],
+            page=row["page"],
+            status=row["status"],
+            created_at=row["created_at"],
+        )
+
+
 def database_summary(path: Path) -> dict[str, Any]:
     """Return record counts and integrity information for documentation/support."""
     with _connect(path) as connection:
@@ -361,6 +416,7 @@ def database_summary(path: Path) -> dict[str, Any]:
             "training_jobs": connection.execute("SELECT COUNT(*) FROM training_jobs").fetchone()[0],
             "validation_jobs": connection.execute("SELECT COUNT(*) FROM validation_jobs").fetchone()[0],
             "validation_models": connection.execute("SELECT COUNT(*) FROM validation_models").fetchone()[0],
+            "tickets": connection.execute("SELECT COUNT(*) FROM tickets").fetchone()[0],
             "integrity_check": connection.execute("PRAGMA integrity_check").fetchone()[0],
             "foreign_key_violations": len(connection.execute("PRAGMA foreign_key_check").fetchall()),
         }

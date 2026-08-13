@@ -5,10 +5,12 @@ import pytest
 
 from domain.entities import Experiment, ExperimentConfig, TaskType, TrialResult
 from domain.training import TrainingJob, TrainingMode
+from domain.ticket import Ticket, TicketType
 from domain.validation import ModelValidationResult, ValidationJob
 from infrastructure.repository import JsonExperimentRepository
 from infrastructure.sqlite import (
     SqliteExperimentRepository,
+    SqliteTicketRepository,
     SqliteTrainingJobRepository,
     SqliteValidationRepository,
     database_summary,
@@ -55,6 +57,7 @@ def test_migrates_all_json_histories_without_changing_sources(tmp_path: Path):
         "training_jobs": 1,
         "validation_jobs": 1,
         "validation_models": 1,
+        "tickets": 0,
         "integrity_check": "ok",
         "foreign_key_violations": 0,
     }
@@ -76,6 +79,27 @@ def test_sqlite_repositories_update_individual_records(tmp_path: Path):
     loaded = repository.get(experiment.id)
     assert loaded.best_trial == 1
     assert loaded.trials[0].hyperparameters == {"batch": 4}
+
+
+def test_ticket_repository_persists_developer_visible_reports(tmp_path: Path):
+    database = initialize_database(tmp_path)
+    repository = SqliteTicketRepository(database)
+    ticket = Ticket(
+        title="Add dark mode",
+        type=TicketType.FEATURE,
+        message="A dark theme would make overnight training easier to monitor.",
+        page="/training",
+    )
+
+    repository.save(ticket)
+
+    loaded = repository.get(ticket.id)
+    assert loaded is not None
+    assert loaded.title == "Add dark mode"
+    assert loaded.type is TicketType.FEATURE
+    assert loaded.status == "new"
+    assert repository.list()[0].page == "/training"
+    assert database_summary(database)["tickets"] == 1
 
 
 def test_invalid_legacy_json_aborts_without_replacing_database(tmp_path: Path):

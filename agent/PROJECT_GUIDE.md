@@ -20,6 +20,7 @@ This is currently a practical MVP for a single user and normally one GPU. It is 
 - A **trial** is one optimizer training run with one randomly sampled hyperparameter configuration.
 - A **final-training job** is a full-budget training run created from the winner of an optimizer experiment.
 - A **validation job** compares one or more `.pt` checkpoints on the YAML `test:` split.
+- A **ticket** is a user-submitted feature request, bug report, or miscellaneous note stored for developers in SQLite.
 - `best.pt` is the checkpoint with the best validation performance in a run.
 - `last.pt` is the latest epoch checkpoint and is the checkpoint used for interruption recovery.
 - `resume=True` restores a genuinely interrupted run, including epoch, optimizer, and scheduler state. Starting another training phase from a completed trial's `last.pt` is not the same operation; it loads those weights and starts a new phase.
@@ -96,6 +97,8 @@ Stock model names may cause Ultralytics to download weights. Local `.pt` paths a
 | Train best | `/training` | `frontend/training.html`, `training.css`, `training.js` |
 | Validate | `/validation` | `frontend/validation.html`, `validation.css`, `validation.js` |
 
+All three pages also load `frontend/ticket.css` and `frontend/ticket.js`. The header Ticket button opens a shared modal and submits to the ticket API.
+
 Important API groups:
 
 - `/api/options`
@@ -107,6 +110,7 @@ Important API groups:
 - `/api/training/jobs/{id}/resume`
 - `/api/validation/jobs` and `/api/validation/jobs/{id}`
 - `/api/validation/jobs/{id}/retry`
+- `POST /api/tickets` (submission only; no public read endpoint)
 
 `interfaces/api.py` is the composition root. It creates repositories, adapters, use cases, the background executor, recovery hooks, request models, and HTTP routes. Avoid putting business calculations there; route functions should validate/translate inputs and invoke application services.
 
@@ -279,6 +283,8 @@ data/
 ```
 
 SQLite repositories use one connection per operation, foreign-key enforcement, WAL journal mode, a five-second busy timeout, short transactions, indexes for status/time, and hydration back into domain dataclasses/enums. Optimizer trials and validation models are child tables; flexible configs, metrics, hyperparameters, and per-class rows remain JSON payloads inside SQLite.
+
+The `tickets` table stores `id`, `title`, `type` (`feature`, `bug`, or `misc`), `message`, originating `page`, `status`, and `created_at`. Ticket history is intentionally database-only for now. Developers can query it with `sqlite3 data/studio.db "SELECT * FROM tickets ORDER BY created_at DESC;"`.
 
 `initialize_database()` atomically creates `studio.db.migrating`, imports any legacy JSON histories, runs integrity and foreign-key checks, renames the verified database into place, and leaves source JSON unchanged. Once `studio.db` exists, legacy JSON is no longer read or updated. See `migrate.md` for backup, verification, and rollback.
 
@@ -503,6 +509,7 @@ domain/
 ├── entities.py                Optimizer entities/search space/status
 ├── training.py                Final-training job entity
 ├── validation.py              Validation job/model result entities
+├── ticket.py                  User ticket entity and type enum
 └── naming.py                  Readable and legacy-safe artifact naming
 
 application/
@@ -529,7 +536,8 @@ interfaces/
 frontend/
 ├── index.html/styles.css/app.js
 ├── training.html/training.css/training.js
-└── validation.html/validation.css/validation.js
+├── validation.html/validation.css/validation.js
+└── ticket.css/ticket.js       Shared ticket popup used by every page
 
 main.py                        ASGI export and config-driven launcher
 config.yaml                    Host, port, reload
