@@ -4,6 +4,7 @@
 .training-section { padding: 29px; }
 .jobs-panel { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; }
 .select-gap, .form-gap { margin-top: 18px; }
+.database-source { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(217,255,67,.12); }.database-source b, .database-source span { display: block; }.database-source b { font-size: 11px; }.database-source span { color: var(--muted); font: 9px DM Mono; margin-top: 4px; overflow-wrap: anywhere; }.database-source button { border: 0; border-radius: 8px; background: var(--ink); color: white; padding: 8px 12px; font-size: 10px; cursor: pointer; }
 .winner-header { display: flex; justify-content: space-between; gap: 15px; align-items: end; margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--line); }
 .winner-header h3 { margin: 0; font-size: 18px; }
 .winner-header p { color: var(--muted); font: 10px DM Mono; margin: 4px 0 0; }

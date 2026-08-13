@@ -23,12 +23,11 @@ async function loadExperiments() {
   const message = $("#source-message");
   message.hidden = true;
   try {
-    const result = await api("/api/training/experiments/inspect", {
-      method: "POST",
-      body: JSON.stringify({ path: $("#experiments-path").value })
-    });
-    state.sourcePath = result.path;
+    const result = await api("/api/training/experiments");
+    state.sourcePath = null;
     state.experiments = result.experiments;
+    $("#database-path").textContent = result.path;
+    if (!state.experiments.length) throw new Error("No optimizer experiment with a completed best trial is available yet.");
     $("#experiment-select").innerHTML = state.experiments.map(experiment =>
       `<option value="${experiment.id}">${escapeHtml(experiment.name)} · Trial ${experiment.best_trial}</option>`
     ).join("");
@@ -114,7 +113,7 @@ async function submitTraining(event) {
   message.hidden = true;
   button.disabled = true;
   const body = {
-    experiment_path: state.sourcePath,
+    experiment_path: null,
     experiment_id: state.current.id,
     name: form.get("name"),
     mode,
@@ -178,7 +177,7 @@ async function init() {
   $$('[name="mode"]').forEach(input => input.addEventListener("change", updateMode));
   $("#training-form").addEventListener("submit", submitTraining);
   $("#refresh-jobs").addEventListener("click", loadJobs);
-  await loadJobs();
+  await Promise.all([loadJobs(), loadExperiments()]);
 }
 
 init();

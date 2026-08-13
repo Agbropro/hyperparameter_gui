@@ -25,8 +25,8 @@
       <section class="training-layout">
         <div class="training-main">
           <section class="panel training-section">
-            <div class="panel-heading"><div><span class="step">01</span><h2>Load optimizer results</h2></div><span class="muted">experiments.json</span></div>
-            <label class="field"><span>Experiments JSON path</span><div class="input-action"><input id="experiments-path" placeholder="/path/to/data/experiments.json" /><button id="load-experiments" type="button">Load</button></div></label>
+            <div class="panel-heading"><div><span class="step">01</span><h2>Select optimizer result</h2></div><span class="muted">studio.db</span></div>
+            <div class="database-source"><div><b>SQLite experiment history</b><span id="database-path">Loading active database…</span></div><button id="load-experiments" type="button">Refresh</button></div>
             <div id="source-message" class="message" hidden></div>
             <label id="experiment-select-wrap" class="field select-gap" hidden><span>Experiment</span><select id="experiment-select"></select></label>
             <div id="winner-preview" hidden></div>

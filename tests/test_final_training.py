@@ -10,6 +10,7 @@ from infrastructure.experiment_importer import read_experiment_file
 from infrastructure.final_trainer import UltralyticsFinalTrainer
 from infrastructure.training_repository import JsonTrainingJobRepository
 from interfaces.api import _ensure_train_and_val_only
+from interfaces.api import _experiment_source
 from domain.entities import TaskType
 
 
@@ -126,3 +127,28 @@ def test_classification_final_training_never_falls_back_to_test(tmp_path: Path):
         assert "requires a val folder" in str(exc)
     (tmp_path / "val").mkdir()
     _ensure_train_and_val_only(str(tmp_path), TaskType.CLASSIFY)
+
+
+def test_sqlite_experiment_source_exposes_completed_winner(tmp_path: Path):
+    from domain.entities import Experiment, ExperimentConfig, TrialResult
+
+    run = tmp_path / "winner"
+    (run / "weights").mkdir(parents=True)
+    (run / "weights" / "last.pt").write_bytes(b"last")
+    dataset = tmp_path / "data.yaml"
+    dataset.write_text("train: images/train\nval: images/val\ntest: images/test\n", encoding="utf-8")
+    experiment = Experiment(
+        config=ExperimentConfig(
+            name="Search", task=TaskType.DETECT, model="yolo11n.pt", dataset=str(dataset),
+            trials=1, epochs=2, metrics=["f1"],
+        ),
+        trials=[TrialResult(
+            number=1, hyperparameters={"batch": 8}, metrics={"f1": 0.75}, score=0.75,
+            status="completed", run_directory=str(run),
+        )],
+        best_trial=1,
+    )
+    source = _experiment_source(experiment)
+    assert source["best_trial"] == 1
+    assert source["last_weights"] == str(run / "weights" / "last.pt")
+    assert source["source"] == "sqlite"

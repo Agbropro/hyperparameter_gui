@@ -22,7 +22,7 @@ from domain.training import TrainingJob, TrainingMode
 from domain.validation import ModelValidationResult, ValidationJob
 from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
-from infrastructure.experiment_importer import get_imported_experiment, read_experiment_file
+from infrastructure.experiment_importer import get_imported_experiment, read_dataset_splits, read_experiment_file
 from infrastructure.final_trainer import UltralyticsFinalTrainer
 from infrastructure.yolo_trainer import UltralyticsTrainer
 from infrastructure.yolo_validator import UltralyticsModelValidator
@@ -140,7 +140,7 @@ class ExperimentFileRequest(BaseModel):
 
 
 class TrainingJobRequest(BaseModel):
-    experiment_path: str = Field(min_length=1)
+    experiment_path: str | None = None
     experiment_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=100)
     mode: TrainingMode
@@ -278,6 +278,17 @@ def inspect_experiment_file(request: ExperimentFileRequest) -> dict[str, Any]:
     return {"path": experiments[0]["source_path"], "experiments": experiments}
 
 
+@app.get("/api/training/experiments")
+def list_training_experiments() -> dict[str, Any]:
+    """Return optimizer winners directly from the active SQLite database."""
+    experiments = []
+    for experiment in repository.list():
+        source = _experiment_source(experiment)
+        if source:
+            experiments.append(source)
+    return {"source": "sqlite", "path": str(DATABASE_PATH), "experiments": experiments}
+
+
 @app.get("/api/training/jobs")
 def list_training_jobs() -> list[dict[str, Any]]:
     return [job.to_dict() for job in training_repository.list()]
@@ -294,7 +305,13 @@ def get_training_job(job_id: str) -> dict[str, Any]:
 @app.post("/api/training/jobs", status_code=202)
 def create_training_job(request: TrainingJobRequest) -> dict[str, Any]:
     try:
-        source = get_imported_experiment(request.experiment_path, request.experiment_id)
+        if request.experiment_path:
+            source = get_imported_experiment(request.experiment_path, request.experiment_id)
+        else:
+            experiment = repository.get(request.experiment_id)
+            source = _experiment_source(experiment) if experiment else None
+            if not source:
+                raise ValueError("selected optimizer experiment has no completed best trial")
         selected_task = TaskType(source["task"]) if request.mode is TrainingMode.CONTINUE else request.task
         selected_dataset = source["dataset"] if request.mode is TrainingMode.CONTINUE else request.dataset
         inspected = inspect_dataset(selected_dataset, selected_task)
@@ -367,6 +384,46 @@ def resume_training_job(job_id: str) -> dict[str, Any]:
 def _model_name(version: str, size: str, task: str) -> str:
     suffix = {"detect": "", "segment": "-seg", "classify": "-cls"}[task]
     return f"{version}{size}{suffix}.pt"
+
+
+def _experiment_source(experiment: Experiment | None) -> dict[str, Any] | None:
+    """Translate a persisted optimizer winner into the final-training preview."""
+    if not experiment or experiment.best_trial is None:
+        return None
+    best = next(
+        (
+            trial
+            for trial in experiment.trials
+            if trial.number == experiment.best_trial and trial.status == "completed"
+        ),
+        None,
+    )
+    if not best:
+        return None
+    run_dir = Path(best.run_directory) if best.run_directory else None
+    last_weights = run_dir / "weights" / "last.pt" if run_dir else None
+    best_weights = run_dir / "weights" / "best.pt" if run_dir else None
+    config = experiment.config
+    return {
+        "id": experiment.id,
+        "name": config.name,
+        "status": experiment.status.value,
+        "task": config.task.value,
+        "model": config.model,
+        "dataset": config.dataset,
+        "image_size": config.image_size,
+        "device": config.device,
+        "best_trial": best.number,
+        "metrics": best.metrics,
+        "score": best.score,
+        "hyperparameters": best.hyperparameters,
+        "run_directory": best.run_directory,
+        "last_weights": str(last_weights) if last_weights and last_weights.is_file() else None,
+        "best_weights": str(best_weights) if best_weights and best_weights.is_file() else None,
+        "dataset_splits": read_dataset_splits(config.dataset, config.task.value),
+        "source_path": str(DATABASE_PATH),
+        "source": "sqlite",
+    }
 
 
 def _ensure_train_and_val_only(dataset: str, task: TaskType) -> None:

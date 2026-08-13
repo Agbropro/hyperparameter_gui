@@ -52,8 +52,8 @@ The first use of a stock model such as `yolo11n.pt` may download its weights. En
 
 Open <http://127.0.0.1:8000/training> or select **Train best** in the header.
 
-1. Paste the absolute path to an `experiments.json` created by this application.
-2. Select a completed experiment. The page displays its winning trial, metrics, hyperparameters, dataset splits, and checkpoint availability.
+1. The page loads completed optimizer experiments directly from the active SQLite `studio.db`.
+2. Select a completed experiment. The page displays its winning trial, metrics, hyperparameters, dataset splits, and checkpoint availability. No `experiments.json` path is required.
 3. Choose one of two methods:
    - **New final run** starts from a selected pretrained YOLO version/task/size and applies the winning hyperparameters. Epochs and batch size are explicit final-run controls.
    - **Continue latest weights** loads the winning trial's `weights/last.pt` and starts an additional training phase. Because the tuning run has already completed, this is intentionally a new phase from those weights rather than `resume=True` on the finished trial.

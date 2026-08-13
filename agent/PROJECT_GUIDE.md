@@ -195,7 +195,7 @@ Key files:
 - `infrastructure/final_trainer.py`
 - `infrastructure/training_repository.py`
 
-The user pastes an absolute `experiments.json` path. The importer finds experiments with a valid `best_trial`, exposes the winning metrics/hyperparameters, and checks whether the winning trial's `weights/last.pt` and `weights/best.pt` exist on the current server.
+The page loads experiments with a valid `best_trial` directly from the active SQLite repository, exposes the winning metrics/hyperparameters, and checks whether the winning trial's `weights/last.pt` and `weights/best.pt` exist on the current server. No path input is required. The legacy JSON importer and inspection endpoint remain available for backward compatibility, but the current page does not use them.
 
 There are two user-visible modes:
 
