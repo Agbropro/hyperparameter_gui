@@ -79,7 +79,7 @@ If final training is interrupted after at least one epoch, its own `weights/last
 
 Open <http://127.0.0.1:8000/validation> or select **Validate** in the header. This page performs held-out evaluation with Ultralytics `model.val()`:
 
-Confidence and NMS IoU are exact numeric inputs from `0` through `1`, so values can be typed instead of approximated with sliders.
+Confidence and NMS IoU each have a synchronized numeric input and slider from `0` through `1`, so you can type an exact value or drag the control.
 
 1. Enter a comparison name and a detection/segmentation dataset YAML that defines `test:`.
 2. Choose between 1 and 20 models, give each a readable label, and paste each `.pt` checkpoint path.

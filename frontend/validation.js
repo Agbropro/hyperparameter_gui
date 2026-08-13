@@ -140,8 +140,48 @@ function drawChart() {
   models.forEach((model, index) => { const value = Number(model.metrics[metric]); const barHeight = value / maximum * height; const x = pad.left + slot * index + (slot - barWidth) / 2; const y = pad.top + height - barHeight; ctx.fillStyle = colors[index % colors.length]; ctx.beginPath(); ctx.roundRect(x, y, barWidth, barHeight, 5); ctx.fill(); ctx.fillStyle = "#12130f"; ctx.textAlign = "center"; ctx.font = "10px DM Mono"; ctx.fillText(metricValue(value, metric), x + barWidth / 2, Math.max(12, y - 7)); ctx.fillStyle = "#727369"; ctx.font = "9px Manrope"; const label = model.label.length > 18 ? `${model.label.slice(0, 16)}…` : model.label; ctx.fillText(label, x + barWidth / 2, pad.top + height + 22); });
 }
 
+function setupThreshold(name, digits) {
+  let number = $(`#${name}`);
+  let slider = $(`#${name}-slider`);
+
+  // Upgrade the previous slider/output markup if an old HTML document was cached.
+  if (!slider && number?.type === "range") {
+    slider = number;
+    slider.id = `${name}-slider`;
+    slider.classList.add("threshold-slider");
+    slider.removeAttribute("name");
+    const output = name === "confidence" ? $("#conf-output") : $("#iou-output");
+    number = document.createElement("input");
+    number.type = "number";
+    number.id = name;
+    number.name = name;
+    number.min = "0";
+    number.max = "1";
+    number.step = slider.step;
+    number.value = slider.value;
+    number.required = true;
+    number.className = "threshold-number";
+    if (output) output.replaceWith(number);
+    else slider.parentElement.querySelector("div")?.append(number);
+  }
+  if (!number || !slider) return;
+  const fromSlider = () => { number.value = Number(slider.value).toFixed(digits); };
+  const fromNumber = () => {
+    if (number.value === "") return;
+    const value = Math.max(0, Math.min(1, Number(number.value)));
+    number.value = Number.isFinite(value) ? value.toFixed(digits) : (0).toFixed(digits);
+    slider.value = number.value;
+  };
+  slider.addEventListener("input", fromSlider);
+  number.addEventListener("input", () => { if (number.validity.valid) slider.value = number.value; });
+  number.addEventListener("change", fromNumber);
+  fromNumber();
+}
+
 async function init() {
   renderModelInputs();
+  setupThreshold("confidence", 3);
+  setupThreshold("iou", 2);
   $("#model-count").addEventListener("change", renderModelInputs);
   $("#validation-form").addEventListener("submit", submitValidation);
   $("#refresh-validation").addEventListener("click", loadJobs);

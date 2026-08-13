@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/styles.css?v=ticket-2" />
-    <link rel="stylesheet" href="/assets/validation.css?v=ticket-2" />
+    <link rel="stylesheet" href="/assets/validation.css?v=ticket-3" />
     <link rel="stylesheet" href="/assets/ticket.css?v=ticket-2" />
   </head>
   <body>
@@ -38,8 +38,8 @@
             <label class="field"><span>Device</span><input name="device" placeholder="auto, cpu, 0" /></label>
           </div>
           <div class="thresholds">
-            <label class="threshold"><div><span>Confidence threshold</span><code>0–1</code></div><input name="confidence" id="confidence" type="number" min="0" max="1" step="0.001" value="0.001" required /><small>Type an exact value. Lower values usually preserve recall; higher values suppress weak predictions.</small></label>
-            <label class="threshold"><div><span>NMS IoU threshold</span><code>0–1</code></div><input name="iou" id="iou" type="number" min="0" max="1" step="0.01" value="0.70" required /><small>Type an exact value. This controls how strongly overlapping detections are removed.</small></label>
+            <label class="threshold"><div><span>Confidence threshold</span><input class="threshold-number" name="confidence" id="confidence" type="number" min="0" max="1" step="0.001" value="0.001" required aria-label="Confidence threshold value" /></div><input class="threshold-slider" id="confidence-slider" type="range" min="0" max="1" step="0.001" value="0.001" aria-label="Confidence threshold slider" /><small>Type an exact value or use the slider. Lower values usually preserve recall; higher values suppress weak predictions.</small></label>
+            <label class="threshold"><div><span>NMS IoU threshold</span><input class="threshold-number" name="iou" id="iou" type="number" min="0" max="1" step="0.01" value="0.70" required aria-label="NMS IoU threshold value" /></div><input class="threshold-slider" id="iou-slider" type="range" min="0" max="1" step="0.01" value="0.70" aria-label="NMS IoU threshold slider" /><small>Type an exact value or use the slider. This controls how strongly overlapping detections are removed.</small></label>
           </div>
           <div class="models-heading"><span>Checkpoint labels and paths</span><small>Use each final run's weights/best.pt</small></div>
           <div id="model-inputs" class="model-inputs"></div>
@@ -59,7 +59,7 @@
         <div id="per-class-results"></div>
       </section>
     </main>
-    <script src="/assets/validation.js?v=ticket-2" defer></script>
+    <script src="/assets/validation.js?v=ticket-3" defer></script>
     <script src="/assets/ticket.js?v=ticket-2" defer></script>
   </body>
 </html>
