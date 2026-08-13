@@ -42,7 +42,7 @@
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
       form.reset();
-      feedback.textContent = `Ticket sent. Reference: ${body.id}`;
+      feedback.textContent = `Ticket saved in ${body.database || "SQLite"}. Reference: ${body.id}`;
       feedback.className = "ticket-feedback";
       feedback.hidden = false;
     } catch (error) {

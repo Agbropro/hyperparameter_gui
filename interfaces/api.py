@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import threading
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -36,6 +37,7 @@ from infrastructure.sqlite import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("HYPER_GUI_DATA", ROOT / "data"))
 DATABASE_PATH = initialize_database(DATA_DIR)
 repository = SqliteExperimentRepository(DATABASE_PATH)
@@ -548,4 +550,8 @@ def create_ticket(request: TicketRequest) -> dict[str, str]:
         page=request.page.strip() if request.page else None,
     )
     ticket_repository.save(ticket)
-    return {"id": ticket.id, "status": ticket.status}
+    if ticket_repository.get(ticket.id) is None:
+        logger.error("Ticket %s could not be read after writing to %s", ticket.id, DATABASE_PATH)
+        raise HTTPException(status_code=500, detail="ticket could not be persisted")
+    logger.info("Ticket %s saved to SQLite database %s", ticket.id, DATABASE_PATH)
+    return {"id": ticket.id, "status": ticket.status, "database": str(DATABASE_PATH)}

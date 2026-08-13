@@ -12,6 +12,8 @@ The **Ticket** button in every page lets users submit a feature request, bug rep
 sqlite3 data/studio.db "SELECT created_at, type, title, message, page, status FROM tickets ORDER BY created_at DESC;"
 ```
 
+The success message shows the exact active database path. Use that path when `HYPER_GUI_DATA` changes the data directory, and refresh an already-open SQLite viewer after submitting.
+
 Random search is a sound baseline and parallelizes naturally, but it does not learn from prior trials. For large training budgets, Optuna/Bayesian sampling, pruning, GPU scheduling, and a database-backed job queue would be valuable later additions. This app reports validation metrics emitted by Ultralytics. A truly untouched test set should be evaluated once after choosing a configuration, rather than used to tune the model.
 
 The **Randomization ranges** section controls random search. Each trial samples a new value between the minimum and maximum for every numeric hyperparameter, and randomly selects one batch size and optimizer from their lists. A fixed random seed makes the sequence repeatable; it does not stop the values from being randomized. For example, rerunning seed `42` reproduces the same sequence of Trial 1, Trial 2, and Trial 3 samples, while those three trials still differ from one another. Use the **Parameter help** card in that section to replace the controls with plain-language explanations and the currently configured sampling range of every setting; switching back preserves the values you entered.
