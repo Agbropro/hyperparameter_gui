@@ -6,6 +6,7 @@ Large model artifacts stay on disk. SQLite stores durable metadata and paths.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from pathlib import Path
@@ -21,6 +22,7 @@ from infrastructure.validation_repository import JsonValidationRepository
 
 T = TypeVar("T")
 SCHEMA_VERSION = 2
+logger = logging.getLogger(__name__)
 
 
 def initialize_database(data_dir: Path) -> Path:
@@ -285,6 +287,18 @@ class _SqliteRepository:
             callback(connection)
             connection.commit()
 
+    def _checkpoint_for_external_readers(self) -> None:
+        """Flush WAL data so simple database viewers see a recent write."""
+        try:
+            with _connect(self.path) as connection:
+                busy, _, _ = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if busy:
+                logger.warning("SQLite WAL checkpoint was busy for %s", self.path)
+        except sqlite3.OperationalError as exc:
+            # The committed row remains valid even if another reader temporarily
+            # prevents the optional viewer-compatibility checkpoint.
+            logger.warning("Could not checkpoint SQLite WAL for %s: %s", self.path, exc)
+
 
 class SqliteExperimentRepository(_SqliteRepository):
     def save(self, experiment: Experiment) -> None:
@@ -383,6 +397,7 @@ class SqliteTicketRepository(_SqliteRepository):
                 ),
             )
         )
+        self._checkpoint_for_external_readers()
 
     def get(self, ticket_id: str) -> Ticket | None:
         with _connect(self.path) as connection:
