@@ -57,6 +57,16 @@ The configuration file is used by `python main.py`. Starting the server with the
 
 The first use of a stock model such as `yolo11n.pt` may download its weights. Enter a local weights path to remain fully offline.
 
+### OpenCV video viewer
+
+[`tools/yolo_video_viewer.py`](tools/yolo_video_viewer.py) is a standalone OpenCV GUI for playing a video or webcam feed with YOLO bounding boxes. Edit `MODEL_PATH`, `VIDEO_SOURCE`, confidence, IoU, and the other constants at the top of that single script, then run:
+
+```bash
+python tools/yolo_video_viewer.py
+```
+
+Press Space to pause, `r` to restart a video file, and `q` or Escape to quit. It intentionally has no command-line argument parser.
+
 ## Train a final model from optimizer results
 
 Open <http://127.0.0.1:8000/training> or select **Train best** in the header.
@@ -87,6 +97,9 @@ Confidence and NMS IoU each have a synchronized numeric input and slider from `0
 3. Set confidence, NMS IoU, image size, batch size, and device.
 4. Start validation. Models run sequentially so they do not compete for the same GPU.
 5. Select a completed comparison to inspect the metric chart, full metric table, best values, and per-class results.
+6. Press **View inference** to compare each held-out image's ground truth with every completed model prediction. It starts at 10 images per page, accepts any page size from 1 through 50, and provides numbered previous/next pagination across the complete YAML `test:` split.
+
+Visual pages are generated on demand rather than during metric validation. The first visit runs each model only on that page's images; detection boxes and segmentation masks are cached under `data/validation_inference/`. The cache changes when the dataset, annotations, weights, confidence, IoU, or image size changes.
 
 Every checkpoint is evaluated with the same arguments:
 
@@ -108,6 +121,7 @@ Validation state is stored in `data/studio.db`. Ultralytics plots and artifacts 
 
 ```text
 data/validation_runs/<comparison-name>-<short-id>-<model-number>-<model-label>/
+data/validation_inference/<validation-job-id>/<cache-key>/
 ```
 
 Queued and running comparisons recover after an application restart. Completed model results are skipped during recovery, and a partially failed comparison can retry only its failed checkpoints.

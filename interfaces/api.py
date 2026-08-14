@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -28,6 +28,7 @@ from infrastructure.experiment_importer import get_imported_experiment, read_dat
 from infrastructure.final_trainer import UltralyticsFinalTrainer
 from infrastructure.yolo_trainer import UltralyticsTrainer
 from infrastructure.yolo_validator import UltralyticsModelValidator
+from infrastructure.validation_inference import ValidationInferenceBrowser
 from infrastructure.sqlite import (
     SqliteExperimentRepository,
     SqliteTrainingJobRepository,
@@ -50,6 +51,7 @@ final_training = FinalTrainingService(final_trainer, training_repository)
 validation_repository = SqliteValidationRepository(DATABASE_PATH)
 model_validator = UltralyticsModelValidator(DATA_DIR / "validation_runs")
 validation_service = ValidationService(model_validator, validation_repository)
+validation_inference = ValidationInferenceBrowser(DATA_DIR / "validation_inference")
 ticket_repository = SqliteTicketRepository(DATABASE_PATH)
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("HYPER_GUI_WORKERS", "1")))
 cancel_events: dict[str, threading.Event] = {}
@@ -488,6 +490,36 @@ def get_validation_job(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail="validation job not found")
     return job.to_dict()
+
+
+@app.get("/api/validation/jobs/{job_id}/inference")
+def browse_validation_inference(
+    job_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=50),
+) -> dict[str, Any]:
+    job = validation_repository.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="validation job not found")
+    if job.status.value != "completed":
+        raise HTTPException(status_code=409, detail="inference images are available after validation completes")
+    try:
+        return validation_inference.browse(job, page, page_size)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/validation/jobs/{job_id}/inference/assets/{cache_key}/{asset_path:path}")
+def get_validation_inference_asset(job_id: str, cache_key: str, asset_path: str) -> FileResponse:
+    if not validation_repository.get(job_id):
+        raise HTTPException(status_code=404, detail="validation job not found")
+    try:
+        path = validation_inference.resolve_asset(job_id, cache_key, asset_path)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.post("/api/validation/jobs", status_code=202)

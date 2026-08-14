@@ -110,6 +110,7 @@ Important API groups:
 - `/api/training/jobs/{id}/resume`
 - `/api/validation/jobs` and `/api/validation/jobs/{id}`
 - `/api/validation/jobs/{id}/retry`
+- `/api/validation/jobs/{id}/inference` and its cache-backed image asset route
 - `POST /api/tickets` (submission only; no public read endpoint)
 
 `interfaces/api.py` is the composition root. It creates repositories, adapters, use cases, the background executor, recovery hooks, request models, and HTTP routes. Avoid putting business calculations there; route functions should validate/translate inputs and invoke application services.
@@ -287,6 +288,8 @@ SQLite repositories use one connection per operation, foreign-key enforcement, W
 The FastAPI lifespan starts one daemon thread that attempts a non-blocking `PASSIVE` WAL checkpoint every 10 seconds and stops it during shutdown. Do not move checkpointing back into individual ticket writes; the periodic checkpoint exists only to help external database viewers notice recent rows without adding latency to each submission.
 
 The `tickets` table stores `id`, `title`, `type` (`feature`, `bug`, or `misc`), `message`, originating `page`, `status`, and `created_at`. Ticket history is intentionally database-only for now. Developers can query it with `sqlite3 data/studio.db "SELECT * FROM tickets ORDER BY created_at DESC;"`.
+
+Completed detection/segmentation validation jobs expose an on-demand visual browser for the YAML `test:` split. `infrastructure/validation_inference.py` resolves test images, maps standard `images/...` paths to YOLO `labels/...`, draws detection boxes or polygon masks for ground truth, and uses Ultralytics `Results.plot()` for model predictions. Pages default to 10 images and accept 1–50. Rendered JPEGs are content-keyed filesystem artifacts under `data/validation_inference/`, not SQLite blobs.
 
 `initialize_database()` atomically creates `studio.db.migrating`, imports any legacy JSON histories, runs integrity and foreign-key checks, renames the verified database into place, and leaves source JSON unchanged. Once `studio.db` exists, legacy JSON is no longer read or updated. See `migrate.md` for backup, verification, and rollback.
 
@@ -530,10 +533,14 @@ infrastructure/
 ├── validation_repository.py   Legacy validation JSON repository/import helper
 ├── yolo_trainer.py            Optimizer Ultralytics adapter
 ├── final_trainer.py           Final-training Ultralytics adapter
-└── yolo_validator.py          model.val comparison adapter
+├── yolo_validator.py          model.val comparison adapter
+└── validation_inference.py    Paginated GT/prediction renderer and cache
 
 interfaces/
 └── api.py                     FastAPI composition root and all routes
+
+tools/
+└── yolo_video_viewer.py       Standalone OpenCV video/bounding-box viewer
 
 frontend/
 ├── index.html/styles.css/app.js

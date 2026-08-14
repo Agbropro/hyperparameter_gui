@@ -1,4 +1,4 @@
-const state = { jobs: [], selectedId: null, timer: null };
+const state = { jobs: [], selectedId: null, timer: null, inference: { jobId: null, visible: false, page: 1, pageSize: 10, data: null } };
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const colors = ["#795cff", "#8fb71d", "#ff714b", "#278bb8", "#d84d96", "#8a6842", "#15a37d", "#a758d1"];
@@ -93,7 +93,79 @@ function renderSelected() {
   const metrics = availableMetrics(job); const select = $("#chart-metric"); const previous = select.value;
   select.innerHTML = metrics.map(name => `<option value="${name}">${metricLabel(name)}</option>`).join("");
   select.value = metrics.includes(previous) ? previous : (metrics.includes("map50_95") ? "map50_95" : metrics[0] || "");
+  const toggle = $("#toggle-inference");
+  toggle.hidden = job.status !== "completed";
+  if (state.inference.jobId !== job.id) {
+    state.inference = { jobId: job.id, visible: false, page: 1, pageSize: 10, data: null };
+    $("#inference-browser").hidden = true;
+    $("#inference-items").innerHTML = "";
+  } else {
+    $("#inference-browser").hidden = !state.inference.visible;
+  }
+  toggle.textContent = state.inference.visible ? "Hide inference" : "View inference";
   renderTable(job, metrics); renderPerClass(job); drawChart();
+}
+
+async function toggleInference() {
+  const job = selectedJob();
+  if (!job || job.status !== "completed") return;
+  state.inference.jobId = job.id;
+  state.inference.visible = !state.inference.visible;
+  $("#inference-browser").hidden = !state.inference.visible;
+  $("#toggle-inference").textContent = state.inference.visible ? "Hide inference" : "View inference";
+  if (state.inference.visible && !state.inference.data) await loadInference(1);
+}
+
+async function loadInference(page) {
+  const job = selectedJob();
+  if (!job) return;
+  const sizeInput = $("#inference-page-size");
+  const pageSize = Math.max(1, Math.min(50, Number(sizeInput.value) || 10));
+  sizeInput.value = pageSize;
+  const message = $("#inference-message");
+  message.className = "inference-message loading";
+  message.textContent = "Rendering this page. The first view can take a while because every model runs inference; later views use the cache.";
+  try {
+    const data = await api(`/api/validation/jobs/${job.id}/inference?page=${page}&page_size=${pageSize}`);
+    if (state.selectedId !== job.id) return;
+    state.inference = { jobId: job.id, visible: true, page: data.page, pageSize: data.page_size, data };
+    renderInference(data);
+  } catch (error) {
+    message.className = "inference-message error";
+    message.textContent = error.message;
+  }
+}
+
+function renderInference(data) {
+  $("#inference-summary").textContent = `${data.total_images} TEST IMAGES · ${data.task.toUpperCase()} · PAGE ${data.page}/${data.total_pages}`;
+  const message = $("#inference-message");
+  message.className = "inference-message";
+  message.textContent = `Showing ${data.items.length} image${data.items.length === 1 ? "" : "s"}. Click an image to open it at full size.`;
+  $("#inference-items").innerHTML = data.items.map(item => {
+    const panels = [{ label: "Ground truth", url: item.ground_truth_url }, ...item.predictions];
+    return `<article class="inference-case">
+      <div class="inference-case-title"><b>#${item.index} · ${escapeHtml(item.filename)}</b><span>${panels.length - 1} MODEL${panels.length === 2 ? "" : "S"}</span></div>
+      <div class="inference-strip">${panels.map((panel, index) => `<figure class="inference-panel ${index === 0 ? "ground-truth" : "prediction"}"><figcaption><span>${index === 0 ? "GT" : String(index).padStart(2, "0")}</span><b>${escapeHtml(panel.label)}</b></figcaption><a href="${escapeHtml(panel.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(panel.url)}" loading="lazy" alt="${escapeHtml(panel.label)} annotation for ${escapeHtml(item.filename)}" /></a></figure>`).join("")}</div>
+    </article>`;
+  }).join("");
+  renderInferencePagination(data.page, data.total_pages);
+}
+
+function renderInferencePagination(current, total) {
+  const pages = [];
+  for (let page = 1; page <= total; page++) {
+    if (page === 1 || page === total || Math.abs(page - current) <= 2) pages.push(page);
+  }
+  const controls = [`<button type="button" data-inference-page="${current - 1}" ${current === 1 ? "disabled" : ""}>← Previous</button>`];
+  let previous = 0;
+  pages.forEach(page => {
+    if (page - previous > 1) controls.push("<span>…</span>");
+    controls.push(`<button type="button" data-inference-page="${page}" class="${page === current ? "active" : ""}" ${page === current ? 'aria-current="page"' : ""}>${page}</button>`);
+    previous = page;
+  });
+  controls.push(`<button type="button" data-inference-page="${current + 1}" ${current === total ? "disabled" : ""}>Next →</button>`);
+  $("#inference-pagination").innerHTML = controls.join("");
+  $$('[data-inference-page]').forEach(button => button.addEventListener("click", () => loadInference(Number(button.dataset.inferencePage))));
 }
 
 function renderTable(job, metrics) {
@@ -186,6 +258,8 @@ async function init() {
   $("#validation-form").addEventListener("submit", submitValidation);
   $("#refresh-validation").addEventListener("click", loadJobs);
   $("#chart-metric").addEventListener("change", () => { const job = selectedJob(); renderTable(job, availableMetrics(job)); drawChart(); });
+  $("#toggle-inference").addEventListener("click", toggleInference);
+  $("#inference-page-size").addEventListener("change", () => { if (state.inference.visible) loadInference(1); });
   window.addEventListener("resize", drawChart);
   await loadJobs();
 }

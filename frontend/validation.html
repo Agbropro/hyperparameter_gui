@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/styles.css?v=ticket-2" />
-    <link rel="stylesheet" href="/assets/validation.css?v=ticket-3" />
+    <link rel="stylesheet" href="/assets/validation.css?v=inference-1" />
     <link rel="stylesheet" href="/assets/ticket.css?v=ticket-2" />
   </head>
   <body>
@@ -52,14 +52,23 @@
         </aside>
       </section>
       <section id="comparison-results" class="panel comparison-results" hidden>
-        <div class="results-title"><div><p class="eyebrow">COMPARISON RESULTS</p><h2 id="comparison-name"></h2><p id="comparison-settings"></p></div><label class="field metric-select"><span>Graph metric</span><select id="chart-metric"></select></label></div>
+        <div class="results-title"><div><p class="eyebrow">COMPARISON RESULTS</p><h2 id="comparison-name"></h2><p id="comparison-settings"></p></div><div class="results-actions"><label class="field metric-select"><span>Graph metric</span><select id="chart-metric"></select></label><button id="toggle-inference" class="inference-toggle" type="button" hidden>View inference</button></div></div>
         <div class="chart-wrap"><canvas id="metric-chart" aria-label="Model metric comparison chart"></canvas></div>
         <div id="winner-callout"></div>
         <div class="comparison-table-wrap"><table class="comparison-table"><thead id="comparison-head"></thead><tbody id="comparison-body"></tbody></table></div>
         <div id="per-class-results"></div>
+        <section id="inference-browser" class="inference-browser" hidden>
+          <div class="inference-browser-head">
+            <div><p class="eyebrow">VISUAL COMPARISON</p><h3>Ground truth vs model predictions</h3><p id="inference-summary">Choose a page to render held-out test images.</p></div>
+            <label class="field inference-page-size"><span>Images per page</span><input id="inference-page-size" type="number" value="10" min="1" max="50" /></label>
+          </div>
+          <div id="inference-message" class="inference-message"></div>
+          <div id="inference-items" class="inference-items"></div>
+          <nav id="inference-pagination" class="inference-pagination" aria-label="Inference image pages"></nav>
+        </section>
       </section>
     </main>
-    <script src="/assets/validation.js?v=ticket-3" defer></script>
+    <script src="/assets/validation.js?v=inference-1" defer></script>
     <script src="/assets/ticket.js?v=ticket-2" defer></script>
   </body>
 </html>
