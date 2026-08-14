@@ -17,14 +17,14 @@ database:
 # Visual browser shown after a detection/segmentation validation completes.
 validation_inference:
   # Mask strength from 0.0 (invisible) to 1.0 (solid).
-  mask_opacity: 0.25
+  mask_opacity: 0.4
 
   # Initial and maximum number of held-out images shown on one page.
   default_page_size: 10
   max_page_size: 50
 
   # Increase this after changing rendering behavior to rebuild cached images.
-  cache_version: 3
+  cache_version: 4
 
   # Browser cache lifetime for rendered JPEG responses. Use 0 to disable caching.
   asset_cache_seconds: 86400
