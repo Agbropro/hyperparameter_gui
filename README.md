@@ -46,12 +46,37 @@ server:
   host: 127.0.0.1
   port: 8000
   reload: true
+
+database:
+  wal_checkpoint_seconds: 10
+
+validation_inference:
+  mask_opacity: 0.25
+  default_page_size: 10
+  max_page_size: 50
+  cache_version: 3
+  asset_cache_seconds: 86400
+  cache_retention_days: 30
+  cache_max_size_gb: 10
+  cache_cleanup_seconds: 3600
 ```
 
 - `127.0.0.1` makes the GUI available only on the current computer.
 - `0.0.0.0` listens on all network interfaces so another device can connect using this computer's LAN address. Only use it on a trusted network and configure firewall access deliberately.
 - `port` must be between `1` and `65535` and must not already be occupied.
 - `reload` should normally be `true` during development and `false` for deployment.
+- `mask_opacity` controls ground-truth and prediction mask strength from `0.0` to `1.0`.
+- `default_page_size` and `max_page_size` control the visual inference browser.
+- Increase `cache_version` after changing rendering code or styling so cached JPEGs regenerate.
+- `asset_cache_seconds` controls browser caching of those rendered JPEGs; use `0` to disable it.
+- `cache_retention_days` deletes generated caches that have not been accessed for that many days; use `0` to disable age cleanup.
+- `cache_max_size_gb` removes the oldest caches when total generated data exceeds the limit; use `0` to disable the size limit.
+- `cache_cleanup_seconds` controls how often cleanup runs. Cleanup also runs once at application startup.
+- `wal_checkpoint_seconds` controls how often committed WAL data is copied into the main SQLite file for external viewers.
+
+Restart the application after editing these settings. Changing `mask_opacity` automatically creates a new visual cache key; `cache_version` only needs to be increased when the rendering implementation itself changes.
+
+Cache access time is updated whenever an inference page is rendered or one of its JPEGs is served. Cleanup only removes generated directories inside `data/validation_inference/`; validation rows, metrics, model weights, datasets, and SQLite records are never deleted. Under the size limit, the most recently accessed cache is retained even if that single cache is larger than the configured maximum.
 
 The configuration file is used by `python main.py`. Starting the server with the external `uvicorn main:app` command uses Uvicorn's CLI host and port instead.
 

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/styles.css?v=ticket-2" />
-    <link rel="stylesheet" href="/assets/validation.css?v=inference-2" />
+    <link rel="stylesheet" href="/assets/validation.css?v=inference-3" />
     <link rel="stylesheet" href="/assets/ticket.css?v=ticket-2" />
   </head>
   <body>
@@ -60,7 +60,7 @@
         <section id="inference-browser" class="inference-browser" hidden>
           <div class="inference-browser-head">
             <div><p class="eyebrow">VISUAL COMPARISON</p><h3>Ground truth vs model predictions</h3><p id="inference-summary">Choose a page to render held-out test images.</p></div>
-            <label class="field inference-page-size"><span>Images per page</span><input id="inference-page-size" type="number" value="10" min="1" max="50" /></label>
+            <label class="field inference-page-size"><span>Images per page</span><input id="inference-page-size" type="number" min="1" /></label>
           </div>
           <div id="inference-message" class="inference-message"></div>
           <div id="inference-items" class="inference-items"></div>
@@ -75,7 +75,7 @@
         <img id="inference-lightbox-image" alt="" />
       </section>
     </div>
-    <script src="/assets/validation.js?v=inference-2" defer></script>
+    <script src="/assets/validation.js?v=inference-3" defer></script>
     <script src="/assets/ticket.js?v=ticket-2" defer></script>
   </body>
 </html>

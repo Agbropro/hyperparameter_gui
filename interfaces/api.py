@@ -24,6 +24,7 @@ from domain.validation import ModelValidationResult, ValidationJob
 from domain.ticket import Ticket, TicketType
 from domain.naming import final_run_name
 from infrastructure.datasets import inspect_dataset
+from infrastructure.configuration import load_application_settings
 from infrastructure.experiment_importer import get_imported_experiment, read_dataset_splits, read_experiment_file
 from infrastructure.final_trainer import UltralyticsFinalTrainer
 from infrastructure.yolo_trainer import UltralyticsTrainer
@@ -40,6 +41,8 @@ from infrastructure.sqlite import (
 
 ROOT = Path(__file__).resolve().parents[1]
 logger = logging.getLogger(__name__)
+APPLICATION_SETTINGS = load_application_settings(ROOT / "config.yaml")
+INFERENCE_SETTINGS = APPLICATION_SETTINGS.validation_inference
 DATA_DIR = Path(os.getenv("HYPER_GUI_DATA", ROOT / "data"))
 DATABASE_PATH = initialize_database(DATA_DIR)
 repository = SqliteExperimentRepository(DATABASE_PATH)
@@ -51,7 +54,13 @@ final_training = FinalTrainingService(final_trainer, training_repository)
 validation_repository = SqliteValidationRepository(DATABASE_PATH)
 model_validator = UltralyticsModelValidator(DATA_DIR / "validation_runs")
 validation_service = ValidationService(model_validator, validation_repository)
-validation_inference = ValidationInferenceBrowser(DATA_DIR / "validation_inference")
+validation_inference = ValidationInferenceBrowser(
+    DATA_DIR / "validation_inference",
+    mask_opacity=INFERENCE_SETTINGS.mask_opacity,
+    cache_version=INFERENCE_SETTINGS.cache_version,
+    cache_retention_days=INFERENCE_SETTINGS.cache_retention_days,
+    cache_max_size_gb=INFERENCE_SETTINGS.cache_max_size_gb,
+)
 ticket_repository = SqliteTicketRepository(DATABASE_PATH)
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("HYPER_GUI_WORKERS", "1")))
 cancel_events: dict[str, threading.Event] = {}
@@ -59,7 +68,9 @@ active_training_jobs: set[str] = set()
 active_training_lock = threading.Lock()
 active_validation_jobs: set[str] = set()
 active_validation_lock = threading.Lock()
-SQLITE_CHECKPOINT_INTERVAL_SECONDS = 10
+SQLITE_CHECKPOINT_INTERVAL_SECONDS = APPLICATION_SETTINGS.database.wal_checkpoint_seconds
+INFERENCE_CACHE_CLEANUP_SECONDS = INFERENCE_SETTINGS.cache_cleanup_seconds
+
 
 def enqueue_experiment(experiment: Experiment) -> None:
     """Queue an experiment once, including recovery after an app restart."""
@@ -101,14 +112,22 @@ def enqueue_validation_job(job: ValidationJob) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    checkpoint_stop = threading.Event()
+    maintenance_stop = threading.Event()
     checkpoint_thread = threading.Thread(
         target=_run_periodic_checkpoint,
-        args=(checkpoint_stop,),
+        args=(maintenance_stop,),
         name="sqlite-checkpoint",
         daemon=True,
     )
+    cache_cleanup_thread = threading.Thread(
+        target=_run_periodic_cache_cleanup,
+        args=(maintenance_stop,),
+        name="inference-cache-cleanup",
+        daemon=True,
+    )
+    validation_inference.cleanup()
     checkpoint_thread.start()
+    cache_cleanup_thread.start()
     for experiment in repository.list():
         if experiment.status.value in ("queued", "running"):
             enqueue_experiment(experiment)
@@ -121,14 +140,20 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
-        checkpoint_stop.set()
+        maintenance_stop.set()
         checkpoint_thread.join(timeout=1)
+        cache_cleanup_thread.join(timeout=1)
         checkpoint_database(DATABASE_PATH)
 
 
 def _run_periodic_checkpoint(stop: threading.Event) -> None:
     while not stop.wait(SQLITE_CHECKPOINT_INTERVAL_SECONDS):
         checkpoint_database(DATABASE_PATH)
+
+
+def _run_periodic_cache_cleanup(stop: threading.Event) -> None:
+    while not stop.wait(INFERENCE_CACHE_CLEANUP_SECONDS):
+        validation_inference.cleanup()
 
 
 app = FastAPI(title="YOLO Hyperparameter Studio", version="1.0.0", lifespan=lifespan)
@@ -479,6 +504,15 @@ def _ensure_train_and_val_only(dataset: str, task: TaskType) -> None:
         raise ValueError(f"dataset YAML must define {', '.join(missing)}")
 
 
+@app.get("/api/validation/inference/settings")
+def validation_inference_settings() -> dict[str, int | float]:
+    return {
+        "mask_opacity": INFERENCE_SETTINGS.mask_opacity,
+        "default_page_size": INFERENCE_SETTINGS.default_page_size,
+        "max_page_size": INFERENCE_SETTINGS.max_page_size,
+    }
+
+
 @app.get("/api/validation/jobs")
 def list_validation_jobs() -> list[dict[str, Any]]:
     return [job.to_dict() for job in validation_repository.list()]
@@ -496,13 +530,18 @@ def get_validation_job(job_id: str) -> dict[str, Any]:
 def browse_validation_inference(
     job_id: str,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=10, ge=1, le=50),
+    page_size: int = Query(default=INFERENCE_SETTINGS.default_page_size, ge=1),
 ) -> dict[str, Any]:
     job = validation_repository.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="validation job not found")
     if job.status.value != "completed":
         raise HTTPException(status_code=409, detail="inference images are available after validation completes")
+    if page_size > INFERENCE_SETTINGS.max_page_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_size cannot exceed {INFERENCE_SETTINGS.max_page_size}",
+        )
     try:
         return validation_inference.browse(job, page, page_size)
     except ValueError as exc:
@@ -519,7 +558,11 @@ def get_validation_inference_asset(job_id: str, cache_key: str, asset_path: str)
         path = validation_inference.resolve_asset(job_id, cache_key, asset_path)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": f"private, max-age={INFERENCE_SETTINGS.asset_cache_seconds}"},
+    )
 
 
 @app.post("/api/validation/jobs", status_code=202)

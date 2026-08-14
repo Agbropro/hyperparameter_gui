@@ -8,3 +8,33 @@ server:
   # Automatically restart the development server after Python code changes.
   # Set this to false for a production deployment.
   reload: true
+
+# SQLite maintenance settings.
+database:
+  # Copy committed WAL changes into studio.db on this interval.
+  wal_checkpoint_seconds: 10
+
+# Visual browser shown after a detection/segmentation validation completes.
+validation_inference:
+  # Mask strength from 0.0 (invisible) to 1.0 (solid).
+  mask_opacity: 0.25
+
+  # Initial and maximum number of held-out images shown on one page.
+  default_page_size: 10
+  max_page_size: 50
+
+  # Increase this after changing rendering behavior to rebuild cached images.
+  cache_version: 3
+
+  # Browser cache lifetime for rendered JPEG responses. Use 0 to disable caching.
+  asset_cache_seconds: 86400
+
+  # Delete generated caches older than this many days. Use 0 to disable age cleanup.
+  cache_retention_days: 30
+
+  # Keep generated inference caches under this total size. Oldest caches go first.
+  # Use 0 to disable the size limit.
+  cache_max_size_gb: 10
+
+  # Run cache cleanup this often while the application is running.
+  cache_cleanup_seconds: 3600

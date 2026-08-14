@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
+import os
+import shutil
 import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,15 +20,32 @@ from domain.validation import ValidationJob
 
 
 IMAGE_SUFFIXES = {".bmp", ".dng", ".jpeg", ".jpg", ".mpo", ".png", ".tif", ".tiff", ".webp"}
-MASK_ALPHA = 0.16
-RENDERER_VERSION = 2
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _CacheEntry:
+    path: Path
+    accessed_at: float
+    size_bytes: int
 
 
 class ValidationInferenceBrowser:
     """Render ground truth and model predictions only for requested pages."""
 
-    def __init__(self, output_dir: Path) -> None:
+    def __init__(
+        self,
+        output_dir: Path,
+        mask_opacity: float,
+        cache_version: int,
+        cache_retention_days: float,
+        cache_max_size_gb: float,
+    ) -> None:
         self.output_dir = output_dir.resolve()
+        self.mask_opacity = mask_opacity
+        self.cache_version = cache_version
+        self.cache_retention_seconds = cache_retention_days * 86400
+        self.cache_max_size_bytes = round(cache_max_size_gb * 1024**3)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
@@ -45,7 +67,7 @@ class ValidationInferenceBrowser:
         task = "detect"
         with self._lock:
             ground_truth, has_segments = self._render_ground_truth(
-                cache_root, selected_images, names, start
+                cache_root, selected_images, names, start, self.mask_opacity
             )
             if has_segments:
                 task = "segment"
@@ -58,10 +80,12 @@ class ValidationInferenceBrowser:
                     job,
                     model_index,
                     model_result.model_path,
+                    self.mask_opacity,
                 )
                 predictions[model_index] = rendered
                 if model_task == "segment":
                     task = "segment"
+            _touch(cache_root)
 
         items = []
         for offset, image_path in enumerate(selected_images):
@@ -92,15 +116,88 @@ class ValidationInferenceBrowser:
         }
 
     def resolve_asset(self, job_id: str, cache_key: str, asset_path: str) -> Path:
-        root = (self.output_dir / job_id / cache_key).resolve()
-        candidate = (root / asset_path).resolve()
-        try:
-            candidate.relative_to(root)
-        except ValueError as exc:
-            raise ValueError("invalid inference asset path") from exc
-        if not candidate.is_file() or candidate.suffix.lower() != ".jpg":
-            raise FileNotFoundError("inference image was not found")
+        with self._lock:
+            root = (self.output_dir / job_id / cache_key).resolve()
+            candidate = (root / asset_path).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError as exc:
+                raise ValueError("invalid inference asset path") from exc
+            if not candidate.is_file() or candidate.suffix.lower() != ".jpg":
+                raise FileNotFoundError("inference image was not found")
+            _touch(root)
         return candidate
+
+    def cleanup(self, now: float | None = None) -> dict[str, int]:
+        """Delete expired/oversize generated caches, oldest first."""
+        current_time = time.time() if now is None else now
+        removed_directories = 0
+        removed_bytes = 0
+        with self._lock:
+            entries = self._cache_entries()
+            if self.cache_retention_seconds > 0:
+                cutoff = current_time - self.cache_retention_seconds
+                for entry in [item for item in entries if item.accessed_at < cutoff]:
+                    if self._remove_cache(entry):
+                        removed_directories += 1
+                        removed_bytes += entry.size_bytes
+                entries = [item for item in entries if item.path.exists()]
+
+            if self.cache_max_size_bytes > 0 and entries:
+                total_size = sum(entry.size_bytes for entry in entries)
+                newest = max(entries, key=lambda entry: entry.accessed_at).path
+                for entry in sorted(entries, key=lambda item: item.accessed_at):
+                    if total_size <= self.cache_max_size_bytes:
+                        break
+                    if entry.path == newest:
+                        continue
+                    if self._remove_cache(entry):
+                        removed_directories += 1
+                        removed_bytes += entry.size_bytes
+                        total_size -= entry.size_bytes
+
+            for job_dir in self.output_dir.iterdir():
+                if job_dir.is_dir() and not job_dir.is_symlink():
+                    try:
+                        job_dir.rmdir()
+                    except OSError:
+                        pass
+        if removed_directories:
+            logger.info(
+                "Removed %s validation inference cache directories (%s bytes)",
+                removed_directories,
+                removed_bytes,
+            )
+        return {"removed_directories": removed_directories, "removed_bytes": removed_bytes}
+
+    def _cache_entries(self) -> list[_CacheEntry]:
+        entries = []
+        for job_dir in self.output_dir.iterdir():
+            if not job_dir.is_dir() or job_dir.is_symlink():
+                continue
+            for cache_dir in job_dir.iterdir():
+                if not cache_dir.is_dir() or cache_dir.is_symlink():
+                    continue
+                try:
+                    entries.append(
+                        _CacheEntry(
+                            path=cache_dir,
+                            accessed_at=cache_dir.stat().st_mtime,
+                            size_bytes=_directory_size(cache_dir),
+                        )
+                    )
+                except OSError as exc:
+                    logger.warning("Could not inspect inference cache %s: %s", cache_dir, exc)
+        return entries
+
+    @staticmethod
+    def _remove_cache(entry: _CacheEntry) -> bool:
+        try:
+            shutil.rmtree(entry.path)
+            return True
+        except OSError as exc:
+            logger.warning("Could not remove inference cache %s: %s", entry.path, exc)
+            return False
 
     def _render_ground_truth(
         self,
@@ -108,6 +205,7 @@ class ValidationInferenceBrowser:
         images: list[Path],
         names: dict[int, str],
         start: int,
+        mask_opacity: float,
     ) -> tuple[list[Path], bool]:
         paths = [cache_root / "ground-truth" / f"{start + offset + 1:07d}.jpg" for offset in range(len(images))]
         has_segments = False
@@ -115,7 +213,7 @@ class ValidationInferenceBrowser:
             if output_path.is_file():
                 has_segments = has_segments or _label_contains_segments(label_path_for(image_path))
                 continue
-            segmented = _draw_ground_truth(image_path, label_path_for(image_path), names, output_path)
+            segmented = _draw_ground_truth(image_path, label_path_for(image_path), names, output_path, mask_opacity)
             has_segments = has_segments or segmented
         return paths, has_segments
 
@@ -127,6 +225,7 @@ class ValidationInferenceBrowser:
         job: ValidationJob,
         model_index: int,
         model_path: str,
+        mask_opacity: float,
     ) -> tuple[list[Path], str]:
         directory = cache_root / f"model-{model_index + 1:02d}"
         task_file = directory / "task.txt"
@@ -164,7 +263,7 @@ class ValidationInferenceBrowser:
         count = 0
         for result, (_, output_path) in zip(results, missing, strict=True):
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            if not cv2.imwrite(str(output_path), _plot_prediction(result)):
+            if not cv2.imwrite(str(output_path), _plot_prediction(result, mask_opacity)):
                 raise RuntimeError(f"could not write inference image: {output_path}")
             count += 1
         if count != len(missing):
@@ -172,8 +271,7 @@ class ValidationInferenceBrowser:
         task_file.write_text(model_task, encoding="utf-8")
         return paths, model_task
 
-    @staticmethod
-    def _cache_key(job: ValidationJob, images: list[Path]) -> str:
+    def _cache_key(self, job: ValidationJob, images: list[Path]) -> str:
         model_files = []
         for model in job.models:
             path = Path(model.model_path)
@@ -186,7 +284,8 @@ class ValidationInferenceBrowser:
             "confidence": job.confidence,
             "iou": job.iou,
             "image_size": job.image_size,
-            "renderer_version": RENDERER_VERSION,
+            "mask_opacity": self.mask_opacity,
+            "renderer_version": self.cache_version,
         }
         digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode())
         for image in images:
@@ -272,7 +371,13 @@ def _label_contains_segments(label_path: Path) -> bool:
     return any(len(line.split()) >= 7 for line in label_path.read_text(encoding="utf-8").splitlines())
 
 
-def _draw_ground_truth(image_path: Path, label_path: Path, names: dict[int, str], output_path: Path) -> bool:
+def _draw_ground_truth(
+    image_path: Path,
+    label_path: Path,
+    names: dict[int, str],
+    output_path: Path,
+    mask_opacity: float,
+) -> bool:
     try:
         import cv2
         import numpy as np
@@ -310,7 +415,7 @@ def _draw_ground_truth(image_path: Path, label_path: Path, names: dict[int, str]
                 )
                 overlay = image.copy()
                 cv2.fillPoly(overlay, [points], color)
-                cv2.addWeighted(overlay, MASK_ALPHA, image, 1 - MASK_ALPHA, 0, image)
+                cv2.addWeighted(overlay, mask_opacity, image, 1 - mask_opacity, 0, image)
                 x, y, box_width, box_height = cv2.boundingRect(points)
                 annotations.append((class_id, (x, y, x + box_width, y + box_height)))
             else:
@@ -351,7 +456,7 @@ def _draw_box_labels(
     return image
 
 
-def _plot_prediction(result: Any) -> Any:
+def _plot_prediction(result: Any, mask_opacity: float) -> Any:
     masks = getattr(result, "masks", None)
     original = getattr(result, "orig_img", None)
     boxes = getattr(result, "boxes", None)
@@ -369,7 +474,7 @@ def _plot_prediction(result: Any) -> Any:
         points = np.asarray(polygon, dtype=np.int32)
         if len(points) >= 3:
             cv2.fillPoly(overlay, [points], _class_color(int(class_id)))
-    cv2.addWeighted(overlay, MASK_ALPHA, image, 1 - MASK_ALPHA, 0, image)
+    cv2.addWeighted(overlay, mask_opacity, image, 1 - mask_opacity, 0, image)
     return result.plot(img=image, boxes=True, masks=False, labels=True, conf=True)
 
 
@@ -382,3 +487,21 @@ def _class_color(class_id: int) -> tuple[int, int, int]:
         pass
     palette = ((255, 92, 121), (67, 255, 217), (75, 113, 255), (184, 255, 91), (255, 168, 74), (216, 77, 190))
     return palette[class_id % len(palette)]
+
+
+def _touch(path: Path) -> None:
+    try:
+        os.utime(path, None)
+    except OSError as exc:
+        logger.warning("Could not update inference cache access time for %s: %s", path, exc)
+
+
+def _directory_size(path: Path) -> int:
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_file() and not item.is_symlink():
+            try:
+                total += item.stat().st_size
+            except OSError:
+                pass
+    return total

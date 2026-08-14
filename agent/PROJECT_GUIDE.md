@@ -82,6 +82,15 @@ server:
 
 The checked-in values may change. Never hardcode assumptions about the current port in new code. `infrastructure/configuration.py` validates this file. Running `uvicorn main:app` directly bypasses these YAML server settings and uses Uvicorn's CLI/default settings.
 
+Other `config.yaml` sections:
+
+- `database.wal_checkpoint_seconds` controls the periodic passive SQLite checkpoint.
+- `validation_inference.mask_opacity` controls both GT and prediction mask opacity.
+- `validation_inference.default_page_size` and `max_page_size` are sent to the frontend settings endpoint.
+- `validation_inference.cache_version` invalidates rendered JPEG caches when increased.
+- `validation_inference.asset_cache_seconds` controls the asset response `Cache-Control` lifetime.
+- `validation_inference.cache_retention_days`, `cache_max_size_gb`, and `cache_cleanup_seconds` control generated-artifact cleanup; zero disables the age or size limit.
+
 Environment variables:
 
 - `HYPER_GUI_DATA` — SQLite persistence and artifact root; defaults to `<project>/data`.
@@ -285,11 +294,13 @@ data/
 
 SQLite repositories use one connection per operation, foreign-key enforcement, WAL journal mode, a five-second busy timeout, short transactions, indexes for status/time, and hydration back into domain dataclasses/enums. Optimizer trials and validation models are child tables; flexible configs, metrics, hyperparameters, and per-class rows remain JSON payloads inside SQLite.
 
-The FastAPI lifespan starts one daemon thread that attempts a non-blocking `PASSIVE` WAL checkpoint every 10 seconds and stops it during shutdown. Do not move checkpointing back into individual ticket writes; the periodic checkpoint exists only to help external database viewers notice recent rows without adding latency to each submission.
+The FastAPI lifespan starts one daemon thread that attempts a non-blocking `PASSIVE` WAL checkpoint at the configured `database.wal_checkpoint_seconds` interval and stops it during shutdown. Do not move checkpointing back into individual ticket writes; the periodic checkpoint exists only to help external database viewers notice recent rows without adding latency to each submission.
 
 The `tickets` table stores `id`, `title`, `type` (`feature`, `bug`, or `misc`), `message`, originating `page`, `status`, and `created_at`. Ticket history is intentionally database-only for now. Developers can query it with `sqlite3 data/studio.db "SELECT * FROM tickets ORDER BY created_at DESC;"`.
 
-Completed detection/segmentation validation jobs expose an on-demand visual browser for the YAML `test:` split. `infrastructure/validation_inference.py` resolves test images, maps standard `images/...` paths to YOLO `labels/...`, and renders ground truth and predictions with matching Ultralytics class colors, box labels, and light polygon-mask opacity. Pages default to 10 images and accept 1–50; clicking a panel opens the frontend lightbox. Rendered JPEGs are content-keyed filesystem artifacts under `data/validation_inference/`, not SQLite blobs. Increment `RENDERER_VERSION` whenever rendering changes so stale cached images are not reused.
+Completed detection/segmentation validation jobs expose an on-demand visual browser for the YAML `test:` split. `infrastructure/validation_inference.py` resolves test images, maps standard `images/...` paths to YOLO `labels/...`, and renders ground truth and predictions with matching Ultralytics class colors, box labels, and configured polygon-mask opacity. Page defaults and limits come from `config.yaml`; clicking a panel opens the frontend lightbox. Rendered JPEGs are content-keyed filesystem artifacts under `data/validation_inference/`, not SQLite blobs. Increase `validation_inference.cache_version` whenever rendering changes so stale cached images are not reused.
+
+Inference cache directories are touched on browse/asset access. Cleanup runs at startup and periodically, first deleting caches older than the retention limit and then deleting oldest caches until under the size limit. It holds the renderer lock, ignores symlink directories, preserves the newest cache during size cleanup, and never traverses outside `data/validation_inference/`. Do not extend cleanup to datasets, weights, validation run directories, or SQLite metadata.
 
 `initialize_database()` atomically creates `studio.db.migrating`, imports any legacy JSON histories, runs integrity and foreign-key checks, renames the verified database into place, and leaves source JSON unchanged. Once `studio.db` exists, legacy JSON is no longer read or updated. See `migrate.md` for backup, verification, and rollback.
 

@@ -1,4 +1,4 @@
-const state = { jobs: [], selectedId: null, timer: null, inference: { jobId: null, visible: false, page: 1, pageSize: 10, data: null } };
+const state = { jobs: [], selectedId: null, timer: null, inferenceConfig: null, inference: { jobId: null, visible: false, page: 1, pageSize: null, data: null } };
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const colors = ["#795cff", "#8fb71d", "#ff714b", "#278bb8", "#d84d96", "#8a6842", "#15a37d", "#a758d1"];
@@ -97,7 +97,7 @@ function renderSelected() {
   const toggle = $("#toggle-inference");
   toggle.hidden = job.status !== "completed";
   if (state.inference.jobId !== job.id) {
-    state.inference = { jobId: job.id, visible: false, page: 1, pageSize: 10, data: null };
+    state.inference = { jobId: job.id, visible: false, page: 1, pageSize: state.inferenceConfig.default_page_size, data: null };
     $("#inference-browser").hidden = true;
     $("#inference-items").innerHTML = "";
   } else {
@@ -121,7 +121,7 @@ async function loadInference(page) {
   const job = selectedJob();
   if (!job) return;
   const sizeInput = $("#inference-page-size");
-  const pageSize = Math.max(1, Math.min(50, Number(sizeInput.value) || 10));
+  const pageSize = Math.max(1, Math.min(state.inferenceConfig.max_page_size, Number(sizeInput.value) || state.inferenceConfig.default_page_size));
   sizeInput.value = pageSize;
   const message = $("#inference-message");
   message.className = "inference-message loading";
@@ -273,6 +273,9 @@ function setupThreshold(name, digits) {
 }
 
 async function init() {
+  state.inferenceConfig = await api("/api/validation/inference/settings");
+  $("#inference-page-size").value = state.inferenceConfig.default_page_size;
+  $("#inference-page-size").max = state.inferenceConfig.max_page_size;
   renderModelInputs();
   setupThreshold("confidence", 3);
   setupThreshold("iou", 2);

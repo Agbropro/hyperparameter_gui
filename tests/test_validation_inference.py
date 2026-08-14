@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,7 +8,7 @@ import numpy as np
 
 from domain.entities import ExperimentStatus
 from domain.validation import ModelValidationResult, ValidationJob
-from infrastructure.validation_inference import MASK_ALPHA, ValidationInferenceBrowser, _plot_prediction, read_test_dataset
+from infrastructure.validation_inference import ValidationInferenceBrowser, _plot_prediction, read_test_dataset
 
 
 def make_dataset(tmp_path: Path) -> tuple[Path, list[Path]]:
@@ -68,7 +69,13 @@ def test_inference_browser_pages_ground_truth_and_cached_predictions(tmp_path: P
             return (FakeResult(path) for path in kwargs["source"])
 
     monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=FakeYOLO))
-    browser = ValidationInferenceBrowser(tmp_path / "inference")
+    browser = ValidationInferenceBrowser(
+        tmp_path / "inference",
+        mask_opacity=0.25,
+        cache_version=1,
+        cache_retention_days=30,
+        cache_max_size_gb=10,
+    )
 
     first = browser.browse(job, page=1, page_size=1)
     assert first["task"] == "segment"
@@ -116,6 +123,55 @@ def test_prediction_masks_use_light_overlay_before_box_plotting():
             assert kwargs["masks"] is False
             return kwargs["img"]
 
-    plotted = _plot_prediction(FakeResult())
+    mask_opacity = 0.25
+    plotted = _plot_prediction(FakeResult(), mask_opacity)
     assert plotted[50, 50].max() > 0
-    assert plotted[50, 50].max() <= round(255 * MASK_ALPHA) + 1
+    assert plotted[50, 50].max() <= round(255 * mask_opacity) + 1
+
+
+def test_cache_cleanup_removes_expired_directories(tmp_path: Path):
+    root = tmp_path / "inference"
+    browser = ValidationInferenceBrowser(
+        root,
+        mask_opacity=0.25,
+        cache_version=1,
+        cache_retention_days=1,
+        cache_max_size_gb=0,
+    )
+    old_cache = root / "job-old" / "cache-old"
+    recent_cache = root / "job-new" / "cache-new"
+    for cache in (old_cache, recent_cache):
+        cache.mkdir(parents=True)
+        (cache / "image.jpg").write_bytes(b"jpeg")
+    now = 2_000_000.0
+    os.utime(old_cache, (now - 172800, now - 172800))
+    os.utime(recent_cache, (now - 60, now - 60))
+
+    result = browser.cleanup(now=now)
+
+    assert result == {"removed_directories": 1, "removed_bytes": 4}
+    assert not old_cache.exists()
+    assert recent_cache.exists()
+
+
+def test_cache_cleanup_enforces_size_oldest_first_and_keeps_newest(tmp_path: Path):
+    root = tmp_path / "inference"
+    browser = ValidationInferenceBrowser(
+        root,
+        mask_opacity=0.25,
+        cache_version=1,
+        cache_retention_days=0,
+        cache_max_size_gb=10 / 1024**3,
+    )
+    caches = [root / f"job-{index}" / "cache" for index in range(3)]
+    for index, cache in enumerate(caches):
+        cache.mkdir(parents=True)
+        (cache / "image.jpg").write_bytes(b"12345678")
+        os.utime(cache, (100 + index, 100 + index))
+
+    result = browser.cleanup(now=1000)
+
+    assert result["removed_directories"] == 2
+    assert not caches[0].exists()
+    assert not caches[1].exists()
+    assert caches[2].exists()
