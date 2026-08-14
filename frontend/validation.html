@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/styles.css?v=ticket-2" />
-    <link rel="stylesheet" href="/assets/validation.css?v=inference-1" />
+    <link rel="stylesheet" href="/assets/validation.css?v=inference-2" />
     <link rel="stylesheet" href="/assets/ticket.css?v=ticket-2" />
   </head>
   <body>
@@ -68,7 +68,14 @@
         </section>
       </section>
     </main>
-    <script src="/assets/validation.js?v=inference-1" defer></script>
+    <div id="inference-lightbox" class="inference-lightbox" hidden>
+      <div class="inference-lightbox-backdrop" data-inference-close></div>
+      <section class="inference-lightbox-card" role="dialog" aria-modal="true" aria-labelledby="inference-lightbox-title">
+        <header><h3 id="inference-lightbox-title">Inference image</h3><button type="button" data-inference-close aria-label="Close enlarged image">×</button></header>
+        <img id="inference-lightbox-image" alt="" />
+      </section>
+    </div>
+    <script src="/assets/validation.js?v=inference-2" defer></script>
     <script src="/assets/ticket.js?v=ticket-2" defer></script>
   </body>
 </html>

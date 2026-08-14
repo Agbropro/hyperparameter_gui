@@ -7,7 +7,7 @@ import numpy as np
 
 from domain.entities import ExperimentStatus
 from domain.validation import ModelValidationResult, ValidationJob
-from infrastructure.validation_inference import ValidationInferenceBrowser, read_test_dataset
+from infrastructure.validation_inference import MASK_ALPHA, ValidationInferenceBrowser, _plot_prediction, read_test_dataset
 
 
 def make_dataset(tmp_path: Path) -> tuple[Path, list[Path]]:
@@ -94,3 +94,28 @@ def test_reads_test_images_and_names_from_dataset_yaml(tmp_path: Path):
     loaded, names = read_test_dataset(dataset)
     assert loaded == images
     assert names == {0: "person"}
+
+
+def test_prediction_masks_use_light_overlay_before_box_plotting():
+    class FakeTensor:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return np.array([0])
+
+    class FakeResult:
+        orig_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        masks = SimpleNamespace(xy=[np.array([[20, 20], [80, 20], [80, 80], [20, 80]])])
+        boxes = SimpleNamespace(cls=FakeTensor())
+
+        def plot(self, **kwargs):
+            assert kwargs["masks"] is False
+            return kwargs["img"]
+
+    plotted = _plot_prediction(FakeResult())
+    assert plotted[50, 50].max() > 0
+    assert plotted[50, 50].max() <= round(255 * MASK_ALPHA) + 1

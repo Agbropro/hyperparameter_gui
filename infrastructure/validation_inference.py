@@ -15,6 +15,8 @@ from domain.validation import ValidationJob
 
 
 IMAGE_SUFFIXES = {".bmp", ".dng", ".jpeg", ".jpg", ".mpo", ".png", ".tif", ".tiff", ".webp"}
+MASK_ALPHA = 0.16
+RENDERER_VERSION = 2
 
 
 class ValidationInferenceBrowser:
@@ -162,7 +164,7 @@ class ValidationInferenceBrowser:
         count = 0
         for result, (_, output_path) in zip(results, missing, strict=True):
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            if not cv2.imwrite(str(output_path), result.plot(boxes=True, masks=True, labels=True, conf=True)):
+            if not cv2.imwrite(str(output_path), _plot_prediction(result)):
                 raise RuntimeError(f"could not write inference image: {output_path}")
             count += 1
         if count != len(missing):
@@ -184,6 +186,7 @@ class ValidationInferenceBrowser:
             "confidence": job.confidence,
             "iou": job.iou,
             "image_size": job.image_size,
+            "renderer_version": RENDERER_VERSION,
         }
         digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode())
         for image in images:
@@ -280,6 +283,7 @@ def _draw_ground_truth(image_path: Path, label_path: Path, names: dict[int, str]
         raise ValueError(f"could not read test image: {image_path}")
     height, width = image.shape[:2]
     segmented = False
+    annotations: list[tuple[int, tuple[int, int, int, int]]] = []
     if label_path.is_file():
         for raw_line in label_path.read_text(encoding="utf-8").splitlines():
             fields = raw_line.split()
@@ -297,8 +301,7 @@ def _draw_ground_truth(image_path: Path, label_path: Path, names: dict[int, str]
                 y1 = round((center_y - box_height / 2) * height)
                 x2 = round((center_x + box_width / 2) * width)
                 y2 = round((center_y + box_height / 2) * height)
-                cv2.rectangle(image, (x1, y1), (x2, y2), color, max(2, round(width / 500)))
-                anchor = (x1, max(16, y1))
+                annotations.append((class_id, (x1, y1, x2, y2)))
             elif len(values) >= 6 and len(values) % 2 == 0:
                 segmented = True
                 points = np.array(
@@ -307,28 +310,75 @@ def _draw_ground_truth(image_path: Path, label_path: Path, names: dict[int, str]
                 )
                 overlay = image.copy()
                 cv2.fillPoly(overlay, [points], color)
-                cv2.addWeighted(overlay, 0.30, image, 0.70, 0, image)
-                cv2.polylines(image, [points], True, color, max(2, round(width / 500)), cv2.LINE_AA)
-                anchor = tuple(points[0])
+                cv2.addWeighted(overlay, MASK_ALPHA, image, 1 - MASK_ALPHA, 0, image)
+                x, y, box_width, box_height = cv2.boundingRect(points)
+                annotations.append((class_id, (x, y, x + box_width, y + box_height)))
             else:
                 continue
-            _draw_label(image, names.get(class_id, str(class_id)), anchor, color)
+    image = _draw_box_labels(image, annotations, names)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output_path), image):
         raise RuntimeError(f"could not write ground-truth image: {output_path}")
     return segmented
 
 
-def _draw_label(image: Any, label: str, anchor: tuple[int, int], color: tuple[int, int, int]) -> None:
+def _draw_box_labels(
+    image: Any,
+    annotations: list[tuple[int, tuple[int, int, int, int]]],
+    names: dict[int, str],
+) -> Any:
+    try:
+        from ultralytics.utils.plotting import Annotator
+
+        annotator = Annotator(image, line_width=None, example=str(names))
+        for class_id, box in annotations:
+            annotator.box_label(box, names.get(class_id, str(class_id)), color=_class_color(class_id))
+        return annotator.result()
+    except (ImportError, AttributeError):
+        pass
+
     import cv2
 
-    x, y = int(anchor[0]), int(anchor[1])
-    (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
-    top = max(0, y - text_height - baseline - 7)
-    cv2.rectangle(image, (x, top), (x + text_width + 8, top + text_height + baseline + 7), color, -1)
-    cv2.putText(image, label, (x + 4, top + text_height + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (18, 19, 15), 1, cv2.LINE_AA)
+    thickness = max(2, round(image.shape[1] / 500))
+    for class_id, (x1, y1, x2, y2) in annotations:
+        color = _class_color(class_id)
+        label = names.get(class_id, str(class_id))
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+        (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        top = max(0, y1 - text_height - baseline - 7)
+        cv2.rectangle(image, (x1, top), (x1 + text_width + 8, top + text_height + baseline + 7), color, -1)
+        cv2.putText(image, label, (x1 + 4, top + text_height + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    return image
+
+
+def _plot_prediction(result: Any) -> Any:
+    masks = getattr(result, "masks", None)
+    original = getattr(result, "orig_img", None)
+    boxes = getattr(result, "boxes", None)
+    if masks is None or original is None:
+        return result.plot(boxes=True, masks=True, labels=True, conf=True)
+
+    import cv2
+    import numpy as np
+
+    image = original.copy()
+    overlay = image.copy()
+    polygons = getattr(masks, "xy", []) or []
+    class_ids = boxes.cls.detach().cpu().numpy().astype(int) if boxes is not None else np.zeros(len(polygons), dtype=int)
+    for polygon, class_id in zip(polygons, class_ids):
+        points = np.asarray(polygon, dtype=np.int32)
+        if len(points) >= 3:
+            cv2.fillPoly(overlay, [points], _class_color(int(class_id)))
+    cv2.addWeighted(overlay, MASK_ALPHA, image, 1 - MASK_ALPHA, 0, image)
+    return result.plot(img=image, boxes=True, masks=False, labels=True, conf=True)
 
 
 def _class_color(class_id: int) -> tuple[int, int, int]:
+    try:
+        from ultralytics.utils.plotting import colors
+
+        return tuple(int(value) for value in colors(class_id, bgr=True))
+    except (ImportError, AttributeError):
+        pass
     palette = ((255, 92, 121), (67, 255, 217), (75, 113, 255), (184, 255, 91), (255, 168, 74), (216, 77, 190))
     return palette[class_id % len(palette)]

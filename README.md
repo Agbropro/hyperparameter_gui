@@ -99,7 +99,7 @@ Confidence and NMS IoU each have a synchronized numeric input and slider from `0
 5. Select a completed comparison to inspect the metric chart, full metric table, best values, and per-class results.
 6. Press **View inference** to compare each held-out image's ground truth with every completed model prediction. It starts at 10 images per page, accepts any page size from 1 through 50, and provides numbered previous/next pagination across the complete YAML `test:` split.
 
-Visual pages are generated on demand rather than during metric validation. The first visit runs each model only on that page's images; detection boxes and segmentation masks are cached under `data/validation_inference/`. The cache changes when the dataset, annotations, weights, confidence, IoU, or image size changes.
+Visual pages are generated on demand rather than during metric validation. Ground truth and predictions use matching class colors, box/label styling, and a light mask overlay so objects remain visible. Clicking any comparison opens an enlarged in-page viewer that closes by button, backdrop, or Escape. The first visit runs each model only on that page's images; rendered images are cached under `data/validation_inference/`. The cache changes when the dataset, annotations, weights, visualization style, confidence, IoU, or image size changes.
 
 Every checkpoint is evaluated with the same arguments:
 

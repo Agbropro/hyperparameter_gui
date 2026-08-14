@@ -12,6 +12,7 @@ async function api(path, options = {}) {
 }
 
 function escapeHtml(value) { const node = document.createElement("div"); node.textContent = value ?? ""; return node.innerHTML; }
+function escapeAttribute(value) { return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
 function metricLabel(name) { return name.replaceAll("_", " ").replace("map50 95", "mAP50–95").replace("map50", "mAP50").replace("map75", "mAP75"); }
 function metricValue(value, name) { return name === "inference_ms" ? Number(value).toFixed(2) : Number(value).toFixed(4); }
 
@@ -145,10 +146,31 @@ function renderInference(data) {
     const panels = [{ label: "Ground truth", url: item.ground_truth_url }, ...item.predictions];
     return `<article class="inference-case">
       <div class="inference-case-title"><b>#${item.index} · ${escapeHtml(item.filename)}</b><span>${panels.length - 1} MODEL${panels.length === 2 ? "" : "S"}</span></div>
-      <div class="inference-strip">${panels.map((panel, index) => `<figure class="inference-panel ${index === 0 ? "ground-truth" : "prediction"}"><figcaption><span>${index === 0 ? "GT" : String(index).padStart(2, "0")}</span><b>${escapeHtml(panel.label)}</b></figcaption><a href="${escapeHtml(panel.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(panel.url)}" loading="lazy" alt="${escapeHtml(panel.label)} annotation for ${escapeHtml(item.filename)}" /></a></figure>`).join("")}</div>
+      <div class="inference-strip">${panels.map((panel, index) => `<figure class="inference-panel ${index === 0 ? "ground-truth" : "prediction"}"><figcaption><span>${index === 0 ? "GT" : String(index).padStart(2, "0")}</span><b>${escapeHtml(panel.label)}</b></figcaption><a class="inference-image-link" href="${escapeAttribute(panel.url)}"><img src="${escapeAttribute(panel.url)}" loading="lazy" alt="${escapeAttribute(panel.label)} annotation for ${escapeAttribute(item.filename)}" /></a></figure>`).join("")}</div>
     </article>`;
   }).join("");
+  $$(".inference-image-link").forEach(link => link.addEventListener("click", event => {
+    event.preventDefault();
+    openInferenceLightbox(link.href, $("img", link).alt);
+  }));
   renderInferencePagination(data.page, data.total_pages);
+}
+
+function openInferenceLightbox(url, title) {
+  const modal = $("#inference-lightbox");
+  $("#inference-lightbox-title").textContent = title;
+  const image = $("#inference-lightbox-image");
+  image.src = url;
+  image.alt = title;
+  modal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeInferenceLightbox() {
+  const modal = $("#inference-lightbox");
+  modal.hidden = true;
+  $("#inference-lightbox-image").removeAttribute("src");
+  document.body.style.overflow = "";
 }
 
 function renderInferencePagination(current, total) {
@@ -260,6 +282,8 @@ async function init() {
   $("#chart-metric").addEventListener("change", () => { const job = selectedJob(); renderTable(job, availableMetrics(job)); drawChart(); });
   $("#toggle-inference").addEventListener("click", toggleInference);
   $("#inference-page-size").addEventListener("change", () => { if (state.inference.visible) loadInference(1); });
+  $$('[data-inference-close]').forEach(element => element.addEventListener("click", closeInferenceLightbox));
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && !$("#inference-lightbox").hidden) closeInferenceLightbox(); });
   window.addEventListener("resize", drawChart);
   await loadJobs();
 }
